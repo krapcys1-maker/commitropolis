@@ -215,3 +215,27 @@ button.primary {
   #legend { display: none; }
   #reader { left: 16px; width: auto; top: 45vh; }
 }
+
+.brand { color: var(--text); text-decoration: none; }
+.orbit {
+  color: #0a0f1c;
+  background: linear-gradient(180deg, #ffe3a8, #ffb45a);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(255, 180, 90, 0.45);
+}
+
+/* the cloud veil we arrive through from orbit */
+#arrival {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, #f4f8ff, #dde8ff 60%, #c9d8f5);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+#arrival.on { opacity: 1; }
+#arrival.on.clear { opacity: 0; transition: opacity 2.2s ease; }

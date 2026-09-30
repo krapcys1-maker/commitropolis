@@ -4,6 +4,8 @@ Commitropolis turns a Git repository into a 3D city you can fly through. Folders
 
 For why it is built this way, see [RESEARCH.md](RESEARCH.md).
 
+> **The city now has a universe around it.** The Commitverse layer (galaxy, worlds, landing) lives in `index.html` and `src/universe/`. It is documented in [UNIVERSE_TECH.md](UNIVERSE_TECH.md), and its rules are in [LORE.md](LORE.md). This document covers the city: `city.html`, `src/*.js` and `ingest/`. A world hands over to a city with `city.html?repo=<slug>&from=<login>&arrive=1`.
+
 ## Goals
 
 1. Any public repo becomes a city in under 30 s for typical repos (prebaked for famous ones).

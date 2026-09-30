@@ -4,5 +4,203 @@
     "name": "expressjs/express",
     "files": 214,
     "commits": 5686
+  },
+  {
+    "slug": "karpathy-autoresearch",
+    "name": "karpathy/autoresearch",
+    "files": 9,
+    "commits": 29
+  },
+  {
+    "slug": "karpathy-nanogpt",
+    "name": "karpathy/nanoGPT",
+    "files": 24,
+    "commits": 162
+  },
+  {
+    "slug": "karpathy-nanochat",
+    "name": "karpathy/nanochat",
+    "files": 51,
+    "commits": 361
+  },
+  {
+    "slug": "karpathy-llm101n",
+    "name": "karpathy/LLM101n",
+    "files": 1,
+    "commits": 3
+  },
+  {
+    "slug": "karpathy-llm.c",
+    "name": "karpathy/llm.c",
+    "files": 102,
+    "commits": 1115
+  },
+  {
+    "slug": "karpathy-llm-council",
+    "name": "karpathy/llm-council",
+    "files": 35,
+    "commits": 5
+  },
+  {
+    "slug": "karpathy-mingpt",
+    "name": "karpathy/minGPT",
+    "files": 17,
+    "commits": 75
+  },
+  {
+    "slug": "karpathy-nn-zero-to-hero",
+    "name": "karpathy/nn-zero-to-hero",
+    "files": 9,
+    "commits": 11
+  },
+  {
+    "slug": "karpathy-llama2.c",
+    "name": "karpathy/llama2.c",
+    "files": 22,
+    "commits": 352
+  },
+  {
+    "slug": "karpathy-micrograd",
+    "name": "karpathy/micrograd",
+    "files": 10,
+    "commits": 22
+  },
+  {
+    "slug": "karpathy-char-rnn",
+    "name": "karpathy/char-rnn",
+    "files": 14,
+    "commits": 62
+  },
+  {
+    "slug": "karpathy-convnetjs",
+    "name": "karpathy/convnetjs",
+    "files": 50,
+    "commits": 72
+  },
+  {
+    "slug": "sindresorhus-awesome",
+    "name": "sindresorhus/awesome",
+    "files": 14,
+    "commits": 1051
+  },
+  {
+    "slug": "sindresorhus-awesome-nodejs",
+    "name": "sindresorhus/awesome-nodejs",
+    "files": 8,
+    "commits": 729
+  },
+  {
+    "slug": "tj-commander.js",
+    "name": "tj/commander.js",
+    "files": 218,
+    "commits": 1111
+  },
+  {
+    "slug": "tj-n",
+    "name": "tj/n",
+    "files": 41,
+    "commits": 675
+  },
+  {
+    "slug": "tj-co",
+    "name": "tj/co",
+    "files": 19,
+    "commits": 230
+  },
+  {
+    "slug": "antirez-kilo",
+    "name": "antirez/kilo",
+    "files": 6,
+    "commits": 16
+  },
+  {
+    "slug": "antirez-smallchat",
+    "name": "antirez/smallchat",
+    "files": 7,
+    "commits": 29
+  },
+  {
+    "slug": "antirez-disque",
+    "name": "antirez/disque",
+    "files": 327,
+    "commits": 517
+  },
+  {
+    "slug": "simonw-llm",
+    "name": "simonw/llm",
+    "files": 118,
+    "commits": 1288
+  },
+  {
+    "slug": "simonw-files-to-prompt",
+    "name": "simonw/files-to-prompt",
+    "files": 10,
+    "commits": 34
+  },
+  {
+    "slug": "mitchellh-mapstructure",
+    "name": "mitchellh/mapstructure",
+    "files": 13,
+    "commits": 236
+  },
+  {
+    "slug": "mitchellh-libxev",
+    "name": "mitchellh/libxev",
+    "files": 83,
+    "commits": 487
+  },
+  {
+    "slug": "rich-harris-degit",
+    "name": "Rich-Harris/degit",
+    "files": 74,
+    "commits": 350
+  },
+  {
+    "slug": "rich-harris-magic-string",
+    "name": "Rich-Harris/magic-string",
+    "files": 78,
+    "commits": 592
+  },
+  {
+    "slug": "gaearon-react-hot-loader",
+    "name": "gaearon/react-hot-loader",
+    "files": 323,
+    "commits": 1533
+  },
+  {
+    "slug": "torvalds-uemacs",
+    "name": "torvalds/uemacs",
+    "files": 51,
+    "commits": 239
+  },
+  {
+    "slug": "torvalds-audionoise",
+    "name": "torvalds/AudioNoise",
+    "files": 27,
+    "commits": 46
+  },
+  {
+    "slug": "ggerganov-imtui",
+    "name": "ggerganov/imtui",
+    "files": 43,
+    "commits": 190
+  },
+  {
+    "slug": "ggerganov-ggwave",
+    "name": "ggerganov/ggwave",
+    "files": 150,
+    "commits": 476
+  },
+  {
+    "slug": "yyx990803-vue-hooks",
+    "name": "yyx990803/vue-hooks",
+    "files": 7,
+    "commits": 26
+  },
+  {
+    "slug": "yyx990803-pod",
+    "name": "yyx990803/pod",
+    "files": 27,
+    "commits": 304
   }
 ]

@@ -1,100 +1,88 @@
-# Commitropolis
+# Commitverse
 
-**Fly through any Git repository as a 3D city at night.** Folders are districts, files are buildings (taller = more lines of code), and the windows are lit where people worked recently. Press play to watch the whole commit history build the city, including the parts that were later torn down. Click a building to walk in and read its code.
+**The universe of open source.** Every GitHub account is a world, every repository is a city on it, and every star is a light in its sky. Fly from the whole galaxy down to a single line of code.
 
-![expressjs/express as a city at night, rendered with Blender Cycles](docs/img/hero-express.jpg)
-<sub>`expressjs/express`, rendered with Blender Cycles from the same data the browser uses ([how](#posters-with-blender)).</sub>
+![Andrej Karpathy's world, a Level 6 Ecumenopolis: city lights on the night side, an orbital ring with a space elevator](docs/img/planet-karpathy.jpg)
+<sub>@karpathy's world, rendered with Blender Cycles from real GitHub data. 494,341 ★ make it a Level 6 *Ecumenopolis*, 5,659 ★ short of *Galactic*. Its cities are nanoGPT, nanochat, llm.c, autoresearch…</sub>
+
+## Travel
+
+| The galaxy | A world | A building's code |
+|---|---|---|
+| ![The GitHub galaxy: spiral arms by language, the git singularity at the centre, the AI Nebula and the Stellar Nursery](docs/img/web-galaxy.jpg) | ![Night side of a world: city lights joined by highways, an orbital ring, a rocket launch](docs/img/web-planet-night.jpg) | ![Inside a building: scrolling the code rides an elevator up its floors](docs/img/web-code-elevator.jpg) |
+| 3,953 real accounts in language arms and named sectors. Older accounts sit closer to the core: the galaxy grew outward the way GitHub did. | A person's repositories are cities on their continents. The level of civilisation comes from their stars; the lights come from recent work. | Land in a city to walk its history. Files are buildings, folders are districts, a building's floors are its lines of code. |
+
+**Every world looks like its maker.** Rendered with Blender from the same rules as the browser:
+
+| @sindresorhus · JavaScript desert · *Galactic* | @torvalds · C ice world · *Ecumenopolis* |
+|---|---|
+| ![A golden desert world with highways of light and two orbital rings](docs/img/planet-sindresorhus.jpg) | ![A cold ocean-and-ice world with an orbital ring and a space elevator](docs/img/planet-torvalds.jpg) |
+
+**One continuous zoom:** galaxy → sector → star system → world → city → building → floor → line. Every visual rule is a measurement, so nothing is decoration:
+
+| You see | It means |
+|---|---|
+| A world's size of civilisation (Dust → Galactic) | Total stars of the account, on a log scale: satellites at Colony, a moon base at Civilisation, a spaceport launching rockets at Industrial, an orbital ring and a space elevator at Spacefaring, a second ring and a swarm at Galactic |
+| The kind of planet | Its main language: Python worlds are temperate, JavaScript worlds are deserts, Rust worlds rust, C worlds are ice |
+| City lights on the night side | Where work happened recently; quiet code goes dark |
+| Highways of light | Neighbouring cities (repos) of one world |
+| The Stellar Nursery | Repositories born this year that are rising fast (protostars) |
+| The AI Nebula, the Titan Cluster, the Silent Belt… | Sectors computed from topics, organisation size, archived state ([the lore](docs/LORE.md)) |
+| git at the centre | Everything here is built with it |
+
+## Honest history
 
 | Express, mid-2011 | Express today |
 |---|---|
-| ![Express in 2011: the docs district stands in the middle of the city](docs/img/express-2011.jpg) | ![Express today: the docs district is gone, its lots are empty](docs/img/express-now.jpg) |
+| ![Express in 2011: a docs district in the middle of the city](docs/img/express-2011.jpg) | ![Express today: that district is gone, its lots are empty](docs/img/express-now.jpg) |
 
-In 2011 the middle of the Express city was `docs/`, which moved out in 2012. Today its lots are empty. Most code-city tools can't show this, because they only know the files that exist *now*. In Express, **66% of all lines ever added went into paths that no longer exist.**
+Cities keep their whole past. Files are followed through renames, and deleted code is demolished on screen. In Express, **66% of all lines ever added went into paths that no longer exist**, so a city built only from today's files would miss most of its story.
 
-> **Status: early prototype.** In the browser: the night city, the history timelapse, search with fly-to, deep links, and walking into buildings to read their code. Offline: poster renders with Blender. The AI guide and video export are designed but not built yet. See the [roadmap](docs/ARCHITECTURE.md#roadmap).
-
-## In the browser
-
-| The city | Walking into a file |
-|---|---|
-| ![The city in the browser: lit towers, neon district outlines, labels](docs/img/web-city.jpg) | ![Code view: scrolling the code rides an elevator up the building; the floors being read glow](docs/img/web-code-elevator.jpg) |
-
-**A building is its file, and its floors are the lines.** Open a building and its code appears beside it. As you scroll, the camera rides an elevator up the facade and the floors holding the lines on screen light up. Buildings in the way dissolve (x-ray).
-
-## Quick start
+## Run it
 
 ```bash
 npm install
-npm run dev              # opens the bundled Express city
+npm run dev
 ```
 
-Build a city from any repo (GitHub URL, `owner/repo`, or a local path):
+It opens the galaxy. Search `@anyone` to fly to their world: showcase worlds are prebaked, and any other account is fetched live from the GitHub API.
+
+Grow the universe yourself:
 
 ```bash
-npm run ingest -- https://github.com/facebook/react
-npm run ingest -- ../my-private-repo
+GITHUB_TOKEN=$(gh auth token) node tools/universe/seed.mjs   # reseed galaxy + showcase worlds
+npm run ingest -- karpathy/nanoGPT                           # map a city's full history
 ```
-
-The city appears in the repo picker. Data is written to `public/data/<slug>.json`.
-
-## Controls
-
-| | |
-|---|---|
-| Drag / scroll | orbit / zoom (the camera circles slowly until you touch it) |
-| Click a building | fly to it and see its stats |
-| Double-click, `Enter` or **Enter building** | open its code; scroll to ride the elevator; `Esc` to leave |
-| `/` | search files and folders; Enter flies there |
-| `Space` or ▶ | play the history; drag the slider to scrub |
-
-The URL keeps the view (`?repo=…&focus=path`), so you can link someone straight to a file.
-
-## What the city shows
-
-Every light in the city means something:
-
-| Code | City |
-|---|---|
-| Folder | District, outlined in its own neon colour |
-| File | Building; footprint ∝ √(peak lines), height ∝ lines; big slender files become setback towers |
-| Recent work on a file | **Lit windows.** Code nobody has touched in a long time goes dark |
-| Busy district | Brighter neon crowns on its roofs |
-| Commit, in the timelapse | A beam of light from the roof: warm for growth, red for deletion |
-| Deleted file | Empty lot (rubble) |
-| Renamed file | Same building for its whole life |
-| Biggest files | Spire with a red aircraft light |
-
-## Why another code city?
-
-There are many. We looked at 30+ of them, from Gource and gitdiagram to a dozen 3D repo cities from 2025–26 ([RESEARCH.md](docs/RESEARCH.md)). Commitropolis bets on four things none of them combine:
-
-1. **Honest history.** Files are tracked through renames, and deleted code gets demolished on screen.
-2. **Visuals that carry meaning.** Lights are activity, beams are commits, floors are lines of code.
-3. **Cinematic output.** Poster renders with Blender today; deterministic 60 fps MP4 at 16:9 and 9:16 next.
-4. **An AI guide you can trust** (next). "Show me where login happens" becomes a camera tour, and every stop is checked against the actual code before the camera moves.
-
-How it's built: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Posters with Blender
 
-`tools/blender/render_city.py` rebuilds the same city in Blender and path-traces it with Cycles. You get real glass reflections, a wet street and haze. It needs [Blender](https://www.blender.org/download/) 5.x, and a GPU helps: on an RTX 3060 the four images in this README took 2.5 minutes in total.
+The same data can be rendered in Blender Cycles, which gives real atmosphere, glass and haze. You need [Blender](https://www.blender.org/download/) 5.x; a GPU helps.
 
 ```bash
-blender -b -P tools/blender/render_city.py -- --data public/data/expressjs-express.json --out city.jpg
+blender -b -P tools/blender/render_planet.py -- --planet public/universe/planets/karpathy.json --out world.jpg
+blender -b -P tools/blender/render_city.py -- --data public/data/expressjs-express.json --out city.jpg --at 2011-06-01
 ```
 
-| Option | Default | |
-|---|---|---|
-| `--at YYYY-MM-DD` | HEAD | the city as it stood that day |
-| `--shot low\|wide` | `low` | camera preset |
-| `--res WxH` | `1920x1080` | use `1080x1920` for vertical |
-| `--samples N` | `192` | Cycles samples (denoised) |
-| `--beams N` | `18` | light beams over the most recently changed files |
-| `--fog D` | `0.0008` | haze density, `0` for none |
+## Status
 
-## Stack
+This is an early universe. Working now:
+- the galaxy with sectors and protostars;
+- worlds with levels, styles and night lights;
+- landing into cities;
+- the timelapse with demolitions;
+- the code elevator;
+- the lore prologue and the Codex;
+- Blender posters.
 
-three.js (instanced buildings, procedural facade shaders, bloom) · Vite · highlight.js · a Node ingest built on plain `git` · Blender/Cycles for posters. Planned: Claude for labels and tours, Voyage AI embeddings for semantic search, Playwright + ffmpeg for video.
+Next up: solar systems for organisations, the "add your world" ingest service, release rockets and refactor asteroids from real events, and the AI guide. See [VISION](docs/VISION.md), [LORE](docs/LORE.md), [UNIVERSE_TECH](docs/UNIVERSE_TECH.md), [ARCHITECTURE](docs/ARCHITECTURE.md) and [BENCHMARK](docs/BENCHMARK.md).
+
+## Credits
+
+- Night sky: **NASA/Goddard Space Flight Center Scientific Visualization Studio**, Deep Star Maps 2020. Gaia DR2: ESA/Gaia/DPAC.
+- Atmospheric scattering after [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere) (Unlicense).
+- Simplex noise: [ashima/webgl-noise](https://github.com/ashima/webgl-noise) (MIT).
+- Built with [three.js](https://threejs.org), [Vite](https://vite.dev), [highlight.js](https://highlightjs.org) and [Blender](https://www.blender.org).
+- Data: public GitHub API and git history.
 
 ## License
 

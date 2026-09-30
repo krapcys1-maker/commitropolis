@@ -3,62 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Commitropolis</title>
-    <meta name="description" content="Fly through any Git repository as a 3D city. Folders are districts, files are buildings, history is a timelapse." />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <title>Commitverse</title>
+    <meta name="description" content="The universe of open source: every GitHub account is a world, every repository a city, every star a light in its sky." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app"></div>
 
-    <header class="bar top">
-      <div class="brand">Commitropolis</div>
-      <select id="repo-select" aria-label="Repository"></select>
-      <div class="search">
-        <input id="search" type="search" placeholder="Find a file or folder…  ( / )" autocomplete="off" spellcheck="false" />
-        <ul id="results" hidden></ul>
-      </div>
+    <header class="hud-top">
+      <a class="brand" href="./"><span class="mark"></span>COMMITVERSE</a>
+      <nav id="crumbs"></nav>
+      <div class="spacer"></div>
+      <input id="search" type="search" placeholder="Fly to a world: @login" autocomplete="off" spellcheck="false" />
+      <button id="codex-btn">Codex</button>
     </header>
 
-    <aside id="info" hidden>
-      <button id="info-close" aria-label="Close">×</button>
-      <div id="info-body"></div>
-    </aside>
-
-    <section id="reader" hidden aria-label="Code">
-      <header>
-        <div class="reader-title">
-          <div id="reader-path"></div>
-          <div id="reader-meta"></div>
-        </div>
-        <a id="reader-gh" target="_blank" rel="noopener">GitHub ↗</a>
-        <button id="reader-close" aria-label="Leave building">Exit ⎋</button>
-      </header>
-      <div id="reader-floor"></div>
-      <div class="reader-body">
-        <pre id="reader-gutter"></pre>
-        <pre class="hljs"><code id="reader-code"></code></pre>
-      </div>
-    </section>
-
-    <footer class="bar bottom">
-      <button id="play" aria-label="Play history">▶</button>
-      <input id="timeline" type="range" min="0" max="1000" value="1000" aria-label="Timeline" />
-      <div id="commit">
-        <div id="commit-date"></div>
-        <div id="commit-msg"></div>
-      </div>
-    </footer>
-
-    <div id="legend">
-      <span><i class="dot lit"></i>lit windows = recent work</span>
-      <span><i class="dot hot"></i>commit (growth)</span>
-      <span><i class="dot del"></i>deletion</span>
-      <span><i class="dot ruin"></i>demolished file</span>
-    </div>
-
+    <aside id="card" hidden></aside>
     <div id="tooltip" hidden></div>
-    <div id="loading">Building the city…</div>
+    <div id="hint"></div>
+    <div id="toast" hidden></div>
+    <div id="fade"></div>
+    <section id="codex" hidden></section>
+    <section id="prologue" hidden>
+      <div class="lines"></div>
+      <div class="skip">click to skip</div>
+    </section>
+    <div id="loading">Charting the galaxy…</div>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/universe/main.js"></script>
   </body>
 </html>

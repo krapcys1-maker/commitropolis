@@ -14,26 +14,28 @@ import { CodeReader } from './reader.js';
 import { search } from './search.js';
 
 const $ = (id) => document.getElementById(id);
+const W = () => Math.max(1, innerWidth);
+const H = () => Math.max(1, innerHeight);
 const params = new URLSearchParams(location.search);
 const captureMode = params.has('capture'); // deterministic, externally stepped rendering for video export
 
 // ---------- scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: captureMode });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(W(), H());
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 $('app').appendChild(renderer.domElement);
 
 const labelRenderer = new CSS2DRenderer();
-labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.setSize(W(), H());
 labelRenderer.domElement.className = 'label-layer';
 $('app').appendChild(labelRenderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.3, 8000);
+const camera = new THREE.PerspectiveCamera(45, W() / H(), 0.3, 8000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.495;
@@ -54,20 +56,20 @@ const atmosphere = new Atmosphere(renderer, scene, uniforms);
 const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
 const composer = new EffectComposer(renderer, target);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.75, 0.5, 0.9);
+const bloom = new UnrealBloomPass(new THREE.Vector2(W(), H()), 0.75, 0.5, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const finish = new ShaderPass(FinishShader);
 composer.addPass(finish);
-composer.setSize(innerWidth, innerHeight);
+composer.setSize(W(), H());
 
 function resize() {
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect = W() / H();
   if (reader.open) camera.setViewOffset(innerWidth, innerHeight, innerWidth * 0.22, 0, innerWidth, innerHeight);
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  labelRenderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
+  renderer.setSize(W(), H());
+  labelRenderer.setSize(W(), H());
+  composer.setSize(W(), H());
 }
 addEventListener('resize', resize);
 
@@ -140,6 +142,32 @@ async function load(slug, focus) {
   showCommit(data.commits.at(-1));
   $('loading').hidden = true;
   if (focus) flyTo(focus);
+  else if (params.has('arrive')) arrive(size);
+}
+
+// Coming down from orbit: start high in the sky and descend onto the city as the clouds clear.
+function arrive(size) {
+  controls.autoRotate = false;
+  const toPos = camera.position.clone();
+  const toTarget = controls.target.clone();
+  camera.position.set(size * 0.12, size * 2.6, size * 0.3);
+  controls.target.set(0, 0, 0);
+  flight = { t: 0, dur: 3.4, fromPos: camera.position.clone(), toPos, fromTarget: controls.target.clone(), toTarget, hop: 0 };
+  const veil = $('arrival');
+  if (veil) setTimeout(() => veil.classList.add('clear'), 80);
+  params.delete('arrive');
+  setUrl({ arrive: null });
+}
+
+if (params.has('arrive')) $('arrival').classList.add('on');
+
+// Back to the universe, if we came from a world.
+const fromWorld = params.get('from');
+if (fromWorld) {
+  const back = $('orbit');
+  back.hidden = false;
+  back.href = `./?planet=${encodeURIComponent(fromWorld)}`;
+  back.textContent = `↑ Orbit @${fromWorld}`;
 }
 
 // ---------- camera flights ----------
@@ -387,7 +415,7 @@ addEventListener('keydown', (e) => {
 });
 
 // ---------- frame loop ----------
-const clock = new THREE.Clock();
+let last = performance.now();
 let time = 0;
 
 function fadeLabels() {
@@ -425,7 +453,9 @@ function stepFrame(dt) {
 }
 
 function loop() {
-  stepFrame(Math.min(clock.getDelta(), 0.1));
+  const now = performance.now();
+  stepFrame(Math.min((now - last) / 1000, 0.1));
+  last = now;
   requestAnimationFrame(loop);
 }
 

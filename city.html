@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commitropolis · a city of the Commitverse</title>
+    <meta name="description" content="Fly through any Git repository as a 3D city. Folders are districts, files are buildings, history is a timelapse." />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <header class="bar top">
+      <a id="orbit" class="orbit" hidden href="./">↑ Orbit</a>
+      <a class="brand" href="./">Commitropolis</a>
+      <select id="repo-select" aria-label="Repository"></select>
+      <div class="search">
+        <input id="search" type="search" placeholder="Find a file or folder…  ( / )" autocomplete="off" spellcheck="false" />
+        <ul id="results" hidden></ul>
+      </div>
+    </header>
+
+    <aside id="info" hidden>
+      <button id="info-close" aria-label="Close">×</button>
+      <div id="info-body"></div>
+    </aside>
+
+    <section id="reader" hidden aria-label="Code">
+      <header>
+        <div class="reader-title">
+          <div id="reader-path"></div>
+          <div id="reader-meta"></div>
+        </div>
+        <a id="reader-gh" target="_blank" rel="noopener">GitHub ↗</a>
+        <button id="reader-close" aria-label="Leave building">Exit ⎋</button>
+      </header>
+      <div id="reader-floor"></div>
+      <div class="reader-body">
+        <pre id="reader-gutter"></pre>
+        <pre class="hljs"><code id="reader-code"></code></pre>
+      </div>
+    </section>
+
+    <footer class="bar bottom">
+      <button id="play" aria-label="Play history">▶</button>
+      <input id="timeline" type="range" min="0" max="1000" value="1000" aria-label="Timeline" />
+      <div id="commit">
+        <div id="commit-date"></div>
+        <div id="commit-msg"></div>
+      </div>
+    </footer>
+
+    <div id="legend">
+      <span><i class="dot lit"></i>lit windows = recent work</span>
+      <span><i class="dot hot"></i>commit (growth)</span>
+      <span><i class="dot del"></i>deletion</span>
+      <span><i class="dot ruin"></i>demolished file</span>
+    </div>
+
+    <div id="tooltip" hidden></div>
+    <div id="loading">Building the city…</div>
+    <div id="arrival"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
