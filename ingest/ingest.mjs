@@ -173,6 +173,8 @@ console.log(`${commits.length} commits, ${alive} standing buildings, ${kept.leng
 
 // 4. One layout for every building that ever existed, sized by peak, so nothing moves in the timelapse.
 const layout = layoutCity(buildTree(kept.map((b) => ({ p: b.p, loc: b.peak }))), kept.length);
+const unplaced = layout.files.filter((f) => !f).length;
+if (unplaced) throw new Error(`Layout left ${unplaced} buildings without a lot`);
 const files = kept.map((b, i) => ({
   p: b.p,
   loc: b.loc,

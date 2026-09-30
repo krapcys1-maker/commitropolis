@@ -12,17 +12,20 @@ export function buildTree(files) {
     let node = root;
     for (let k = 0; k < parts.length - 1; k++) {
       const name = parts[k];
-      if (!node.children.has(name)) {
-        node.children.set(name, {
+      const key = `d:${name}`;
+      if (!node.children.has(key)) {
+        node.children.set(key, {
           name,
           path: node.path ? `${node.path}/${name}` : name,
           children: new Map(),
           value: 0,
         });
       }
-      node = node.children.get(name);
+      node = node.children.get(key);
     }
-    node.children.set(parts.at(-1), { name: parts.at(-1), path: f.p, file: i, value: footprintWeight(f.loc) });
+    // Keyed per identity, not per name: two files can end their lives at the same path, and a path
+    // can be a file in one era and a folder in another. Each still needs its own lot.
+    node.children.set(`f:${i}`, { name: parts.at(-1), path: f.p, file: i, value: footprintWeight(f.loc) });
   });
   sumValues(root);
   return root;

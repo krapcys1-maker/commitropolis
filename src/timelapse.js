@@ -38,6 +38,8 @@ export class Timelapse {
     }
     this.target.fill(0);
     this.city.heat.fill(0);
+    this.city.lastTouch.fill(0);
+    this.city.beams.clear();
     this.cursor = 0;
     while (this.cursor < to) this.#apply(this.commits[this.cursor++], false);
     this.city.loc.set(this.target);
@@ -86,10 +88,9 @@ export class Timelapse {
     for (let k = 0; k < c.length; k += 3) {
       const i = c[k];
       this.target[i] = Math.max(0, this.target[i] + c[k + 1] - c[k + 2]);
-      if (flash) {
-        const sign = c[k + 1] >= c[k + 2] ? 1 : -1;
-        this.city.heat[i] = Math.max(-2.2, Math.min(2.2, this.city.heat[i] + sign * 1.4));
-      }
+      this.city.lastTouch[i] = commit.t;
+      if (flash) this.city.touch(i, c[k + 1], c[k + 2]);
     }
+    this.city.now = commit.t;
   }
 }

@@ -4,8 +4,13 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { City } from './city.js';
 import { Timelapse } from './timelapse.js';
+import { Atmosphere } from './atmosphere.js';
+import { FinishShader } from './materials.js';
+import { CodeReader } from './reader.js';
 import { search } from './search.js';
 
 const $ = (id) => document.getElementById(id);
@@ -13,48 +18,58 @@ const params = new URLSearchParams(location.search);
 const captureMode = params.has('capture'); // deterministic, externally stepped rendering for video export
 
 // ---------- scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: captureMode });
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: captureMode });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 $('app').appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05070d);
-scene.fog = new THREE.FogExp2(0x05070d, 0.002);
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.domElement.className = 'label-layer';
+$('app').appendChild(labelRenderer.domElement);
 
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 8000);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.3, 8000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.49;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.autoRotateSpeed = 0.35;
 
-scene.add(new THREE.HemisphereLight(0x9bb8ff, 0x1a1020, 0.8));
-const sun = new THREE.DirectionalLight(0xffe2c0, 1.25);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.bias = -0.0005;
-scene.add(sun, sun.target);
+// Shared shader uniforms: time for animation, and the floor band lit by the code view.
+const uniforms = {
+  uTime: { value: 0 },
+  uFocus: { value: -1 },
+  uBand: { value: new THREE.Vector2() },
+  uCamPos: { value: new THREE.Vector3() },
+  uFocusPos: { value: new THREE.Vector3() },
+  uTunnel: { value: 0 },
+};
+const atmosphere = new Atmosphere(renderer, scene, uniforms);
 
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0x0a0d16, roughness: 1 }));
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = -0.01;
-ground.receiveShadow = true;
-scene.add(ground);
-
-const composer = new EffectComposer(renderer);
+// HDR + MSAA target so bloom sees true highlights and edges stay clean.
+const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, target);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.35, 1.0);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.75, 0.5, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+const finish = new ShaderPass(FinishShader);
+composer.addPass(finish);
+composer.setSize(innerWidth, innerHeight);
 
-addEventListener('resize', () => {
+function resize() {
   camera.aspect = innerWidth / innerHeight;
+  if (reader.open) camera.setViewOffset(innerWidth, innerHeight, innerWidth * 0.22, 0, innerWidth, innerHeight);
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  labelRenderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
-});
+}
+addEventListener('resize', resize);
 
 // ---------- state ----------
 let data = null;
@@ -62,6 +77,7 @@ let city = null;
 let timelapse = null;
 let selected = -1;
 let flight = null;
+let elevator = null; // camera ride along a building's facade while its code is open
 
 const fmtDate = (t) => new Date(t * 1000).toISOString().slice(0, 10);
 const fmtNum = (n) => Math.round(n).toLocaleString('en-US');
@@ -92,15 +108,18 @@ async function loadIndex() {
 
 async function load(slug, focus) {
   $('loading').hidden = false;
+  exitBuilding();
   data = await fetch(`data/${slug}.json`).then((r) => r.json());
   if (city) {
     scene.remove(city.group);
     city.group.traverse((o) => {
       o.geometry?.dispose();
-      o.material?.dispose();
+      if (o.material && o.material !== city.material) o.material.dispose();
+      o.element?.remove();
     });
+    city.material.dispose();
   }
-  city = new City(data);
+  city = new City(data, uniforms);
   scene.add(city.group);
   timelapse = new Timelapse(city);
   timelapse.onCommit = showCommit;
@@ -108,20 +127,13 @@ async function load(slug, focus) {
   $('info').hidden = true;
 
   const size = data.size;
-  ground.scale.set(size * 6, size * 6, 1);
-  scene.fog.density = 0.3 / size;
-  sun.position.set(size * 0.5, size * 0.9, size * 0.3);
-  const sc = sun.shadow.camera;
-  sc.left = sc.bottom = -size * 0.8;
-  sc.right = sc.top = size * 0.8;
-  sc.near = 1;
-  sc.far = size * 3;
-  sc.updateProjectionMatrix();
-  camera.far = size * 12;
+  atmosphere.fitCity(size, scene);
+  camera.far = size * 14;
   camera.updateProjectionMatrix();
-  camera.position.set(size * 0.8, size * 0.75, size * 1.0);
-  controls.target.set(0, 0, 0);
+  camera.position.set(size * 0.66, size * 0.3, size * 0.8);
+  controls.target.set(0, size * 0.02, 0);
   controls.maxDistance = size * 3;
+  controls.autoRotate = !focus && !captureMode;
 
   $('timeline').value = 1000;
   $('play').textContent = '▶';
@@ -134,14 +146,16 @@ async function load(slug, focus) {
 function flyTo(path) {
   const b = city.boundsOf(path);
   if (!b) return;
+  exitBuilding();
   const target = new THREE.Vector3(b.center.x, b.center.y, b.center.z);
   const dist = Math.max(b.radius * 3.2, 16);
   const dir = camera.position.clone().sub(controls.target).normalize();
-  dir.y = Math.max(dir.y, 0.5);
+  dir.y = Math.max(dir.y, 0.45);
   dir.normalize();
   const toPos = target.clone().addScaledVector(dir, dist);
   const hop = camera.position.distanceTo(toPos) * 0.25; // arc up, like a flight rather than a zoom
   $('tooltip').hidden = true;
+  controls.autoRotate = false;
   flight = { t: 0, dur: 1.8, fromPos: camera.position.clone(), toPos, fromTarget: controls.target.clone(), toTarget: target, hop };
   if (b.index >= 0) select(b.index);
   setUrl({ focus: path });
@@ -158,14 +172,82 @@ function updateFlight(dt) {
   controls.target.lerpVectors(flight.fromTarget, flight.toTarget, e);
   if (flight.t >= 1) flight = null;
 }
-controls.addEventListener('start', () => (flight = null));
+controls.addEventListener('start', () => {
+  flight = null;
+  controls.autoRotate = false;
+});
+
+// ---------- entering a building: code + elevator ----------
+const reader = new CodeReader($('reader'), {
+  onRange: (first, last, total) => {
+    if (!elevator) return;
+    const [y0, y1] = city.bandOf(elevator.i, (first - 1) / total, last / total);
+    uniforms.uBand.value.set(y0, y1);
+    elevator.y = city.baseOf(elevator.i) + (y0 + y1) / 2;
+    const floors = Math.max(1, Math.round(city.bandOf(elevator.i, 0, 1)[1] / 1.1));
+    $('reader-floor').textContent = `Floor ${Math.max(1, Math.round((y0 + y1) / 2 / 1.1))} of ${floors} · lines ${first}–${last}`;
+  },
+  onClose: () => exitBuilding(),
+});
+
+function enterBuilding(i) {
+  const f = data.files[i];
+  if (!f.alive) return;
+  if (timelapse.active) {
+    timelapse.finish();
+    $('play').textContent = '▶';
+    $('timeline').value = 1000;
+  }
+  flight = null;
+  controls.autoRotate = false;
+  controls.enabled = false;
+  const center = new THREE.Vector3(f.x + f.w / 2, 0, f.z + f.d / 2);
+  const dir = camera.position.clone().sub(center).setY(0).normalize();
+  if (dir.lengthSq() < 0.5) dir.set(1, 0, 1).normalize();
+  // far enough to see ~20 floors around the lines being read
+  elevator = { i, center, dir, dist: Math.max(f.w, f.d) * 1.2 + 24, y: city.baseOf(i) + 2 };
+  uniforms.uFocus.value = i;
+  uniforms.uTunnel.value = Math.max(f.w, f.d) * 0.7 + 6;
+  uniforms.uBand.value.set(-1, -1);
+  camera.setViewOffset(innerWidth, innerHeight, innerWidth * 0.22, 0, innerWidth, innerHeight);
+  camera.updateProjectionMatrix();
+  $('info').hidden = true;
+  labelRenderer.domElement.hidden = true;
+  reader.show(data, f);
+}
+
+function exitBuilding() {
+  if (!elevator) return;
+  elevator = null;
+  uniforms.uFocus.value = -1;
+  controls.enabled = true;
+  camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+  labelRenderer.domElement.hidden = false;
+  reader.hide();
+  if (selected >= 0) $('info').hidden = false;
+}
+
+function updateElevator(dt) {
+  if (!elevator) return;
+  const { center, dir, dist, y } = elevator;
+  const k = Math.min(1, dt * 3);
+  const wantPos = new THREE.Vector3(center.x + dir.x * dist, y + 3.5, center.z + dir.z * dist);
+  const wantTarget = new THREE.Vector3(center.x, y, center.z);
+  camera.position.lerp(wantPos, k);
+  controls.target.lerp(wantTarget, k);
+  camera.lookAt(controls.target);
+  uniforms.uCamPos.value.copy(camera.position);
+  uniforms.uFocusPos.value.copy(controls.target);
+}
 
 // ---------- selection & info ----------
 function select(i) {
-  if (selected >= 0 && !timelapse.active) city.heat[selected] = city.baseHeat[selected];
+  if (selected >= 0 && !timelapse.active) city.setHeat(selected, city.baseHeat[selected]);
   selected = i;
   const f = data.files[i];
-  const link = f.alive && data.repo.url ? `<a href="${data.repo.url}/blob/${data.repo.head}/${f.p}" target="_blank" rel="noopener">Open on GitHub ↗</a>` : '';
+  const link = f.alive && data.repo.url ? `<a href="${data.repo.url}/blob/${data.repo.head}/${f.p}" target="_blank" rel="noopener">GitHub ↗</a>` : '';
+  const enter = f.alive ? `<button id="enter" class="primary">Enter building ⏎</button>` : '';
   $('info-body').innerHTML = `
     <h3>${f.p}</h3>
     <p><span class="badge">${f.alive ? 'standing' : 'demolished'}</span></p>
@@ -176,11 +258,12 @@ function select(i) {
       <dt>First commit</dt><dd>${f.first ? fmtDate(f.first) : '—'}</dd>
       <dt>Last commit</dt><dd>${f.last ? fmtDate(f.last) : '—'}</dd>
     </dl>
-    ${link}`;
+    <div class="actions">${enter}${link}</div>`;
   $('info').hidden = false;
+  if (f.alive) $('enter').onclick = () => enterBuilding(i);
 }
 $('info-close').onclick = () => {
-  if (selected >= 0 && !timelapse.active) city.heat[selected] = city.baseHeat[selected];
+  if (selected >= 0 && !timelapse.active) city.setHeat(selected, city.baseHeat[selected]);
   selected = -1;
   $('info').hidden = true;
   setUrl({ focus: null });
@@ -195,11 +278,11 @@ let downAt = null;
 function pick(e) {
   pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
-  return raycaster.intersectObject(city.buildings, false)[0]?.instanceId ?? -1;
+  return city.buildingAt(raycaster.intersectObjects(city.pickables, false)[0]);
 }
 
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (!city || hoverPending) return;
+  if (!city || hoverPending || elevator) return;
   hoverPending = true;
   requestAnimationFrame(() => {
     hoverPending = false;
@@ -219,9 +302,13 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 renderer.domElement.addEventListener('pointerleave', () => ($('tooltip').hidden = true));
 renderer.domElement.addEventListener('pointerdown', (e) => (downAt = [e.clientX, e.clientY]));
 renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+  if (elevator || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
   const i = pick(e);
   if (i >= 0) flyTo(data.files[i].p);
+});
+renderer.domElement.addEventListener('dblclick', (e) => {
+  const i = pick(e);
+  if (i >= 0 && data.files[i].alive) enterBuilding(i);
 });
 
 // ---------- search ----------
@@ -272,11 +359,13 @@ function showCommit(c) {
 }
 
 $('play').onclick = () => {
+  exitBuilding();
   if (timelapse.playing) timelapse.pause();
   else timelapse.play();
   $('play').textContent = timelapse.playing ? '❚❚' : '▶';
 };
 $('timeline').addEventListener('input', (e) => {
+  exitBuilding();
   timelapse.pause();
   $('play').textContent = '▶';
   const v = Number(e.target.value) / 1000;
@@ -286,10 +375,12 @@ $('timeline').addEventListener('input', (e) => {
 
 addEventListener('keydown', (e) => {
   if (e.target === input) return;
-  if (e.key === '/') {
+  if (e.key === 'Escape' && elevator) exitBuilding();
+  else if (e.key === 'Enter' && selected >= 0 && !elevator) enterBuilding(selected);
+  else if (e.key === '/') {
     e.preventDefault();
     input.focus();
-  } else if (e.key === ' ') {
+  } else if (e.key === ' ' && !elevator) {
     e.preventDefault();
     $('play').click();
   }
@@ -299,8 +390,18 @@ addEventListener('keydown', (e) => {
 const clock = new THREE.Clock();
 let time = 0;
 
+function fadeLabels() {
+  const size = data?.size ?? 1;
+  for (const label of city?.labels.children ?? []) {
+    const d = camera.position.distanceTo(label.position);
+    label.element.style.opacity = Math.max(0, Math.min(1, (d - size * 0.12) / (size * 0.25)));
+  }
+}
+
 function stepFrame(dt) {
   time += dt;
+  uniforms.uTime.value = time;
+  finish.uniforms.uTime.value = time;
   if (timelapse) {
     const wasPlaying = timelapse.playing;
     timelapse.step(dt);
@@ -310,13 +411,17 @@ function stepFrame(dt) {
       $('timeline').value = 1000;
     }
   }
-  if (city && selected >= 0 && !timelapse.active) {
-    city.heat[selected] = city.baseHeat[selected] + 1.3 + Math.sin(time * 4) * 0.5;
-    city.heatAttr.needsUpdate = true;
+  if (city) {
+    city.tick(dt, time);
+    if (selected >= 0 && !timelapse.active && !elevator) city.setHeat(selected, city.baseHeat[selected] + 0.9 + Math.sin(time * 4) * 0.4);
   }
   updateFlight(dt);
-  controls.update();
+  if (elevator) updateElevator(dt);
+  else controls.update();
+  atmosphere.follow(camera);
   composer.render();
+  fadeLabels();
+  labelRenderer.render(scene, camera);
 }
 
 function loop() {
@@ -331,6 +436,8 @@ window.commitropolis = {
   camera,
   controls,
   flyTo,
+  enterBuilding,
+  exitBuilding,
   stepFrame,
 };
 

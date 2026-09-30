@@ -12,6 +12,7 @@
     "ingest": "node ingest/ingest.mjs"
   },
   "dependencies": {
+    "highlight.js": "^11.12.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

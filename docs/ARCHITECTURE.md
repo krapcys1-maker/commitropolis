@@ -56,6 +56,7 @@ A building is a **file identity**, not a path. We walk history newest → oldest
 - For a change to `to` with rename source `from`, look up `alias[to]` to find the building, then re-point `alias[from]` to it, because before this commit the file lived at `from`.
 - If `to` is unknown, the file doesn't survive to HEAD. It gets a new building marked `alive: 0`, which becomes a ruin in the static view.
 - Reusing a path (delete, then later re-create) maps to the same building. That is intentional: same address, new building.
+- Two identities can still *end* at the same path: a file is deleted, and later another file is renamed onto its path. A path can also be a file in one era and a folder in another. The layout therefore keys lots by identity, not by name, and ingest fails loudly if any building ends up without a lot.
 
 **Why:** in Express, 66% of all lines ever added live in paths that no longer exist, so an ingest that only knows HEAD would show an empty city for years. After this change, 5,686 of 5,688 non-merge commits appear in the timelapse, up from 3,020.
 
@@ -102,20 +103,57 @@ Budget: under 10 MB gzipped for the typical popular repo. Linux-class repos get 
 - **Trade-off:** the static HEAD view has vacant lots where demolished code stood. We show them as dark rubble, which tells a story of its own. Planned: an optional **compact HEAD layout** plus a morph transition at the end of the timelapse (buildings slide into the compact city).
 - **Later:** a **semantic layout** (2D projection of file embeddings, UMAP or similar), morphable from the folder layout. It shows where related code is scattered across folders.
 
-## 4. Renderer (`src/city.js`, `src/main.js`)
+## 4. Renderer (`src/city.js`, `src/materials.js`, `src/atmosphere.js`, `src/main.js`)
 
-- Plain **three.js** (WebGL2) without React/R3F. We want direct control over instancing, shaders and the capture loop.
-- All buildings are **one `InstancedMesh`** (one draw call), and all district plates are a second one.
-- Each instance has a **`heat` attribute** (instanced buffer attribute) injected into `MeshStandardMaterial`'s emissive term via `onBeforeCompile`. Positive heat renders warm (growth, hot files), negative heat renders red (deletion). **UnrealBloom** turns strong emission into glow.
-- Picking uses a raycast against the instanced mesh (O(n), fine to about 50k). Planned: a GPU ID-buffer picker for 100k+.
-- The fly-to camera moves along an eased arc between OrbitControls poses. The URL (`?repo=&focus=`) holds the view, so any link reproduces it.
+Plain **three.js** (WebGL2) without React/R3F. We want direct control over instancing, shaders and the capture loop.
 
-**Scale plan.** The MVP rewrites every instance matrix per timelapse frame, which is O(N) CPU and fine to about 50k buildings. For Linux-class repos:
+### Visual language: every light means something
+
+| Element | Encodes | How |
+|---|---|---|
+| Lit windows | **Recency of work**: `lit = 0.03 + 0.55·e^(−age/halfLife)`, plus a boost for hot files | Per-instance `aLit`; a hash per window cell decides which are on. In the timelapse, `age` is measured from the replayed "now", so untouched parts of the city go dark over time. |
+| Neon crown | The district's hue, brighter where work is recent | Emissive band near the top of each facade |
+| District outline + street lamps | Folder boundaries | Plate shader: distance to the plate edge in world units |
+| Commit beam | One commit touching one file: warm for growth, red for deletion | Additive cylinders in a ring buffer (`src/beams.js`), height ∝ log(lines changed) |
+| Flash | The same commit, on the building itself | Per-instance `aHeat`: above 1 it washes the facade and lights nearly all windows |
+| Rubble | A deleted file | Flat dark slab on its lot (`aRuin`) |
+| Spire with a red light | The largest files | Separate instanced spires and blinking lamps |
+
+- **Two building shapes, both instanced.** Blocks, and setback towers for tall, slender files (three tiers). Each shape is one `InstancedMesh`, so the whole city is a handful of draw calls.
+- **Procedural facades, no textures.** A patched `MeshStandardMaterial` (`onBeforeCompile`) derives the window grid from each instance's scale, so windows are the same size in world units on every building. Unlit windows are glossy metal and reflect the sky. When a window is smaller than a few pixels, the grid **fades to its average** (via `fwidth`) instead of shimmering.
+- **Atmosphere.** A sky dome with a horizon glow and stars; an environment map made from that sky (PMREM), so glass reflects the night; fog matched to the horizon; moonlight with shadows; a ground grid that fades out.
+- **Post-processing.** HDR half-float target with 4× MSAA → UnrealBloom (threshold above 1, so only real light sources glow) → ACES tone mapping → vignette and film grain.
+- **Labels.** CSS2D labels for the biggest top-level districts, fading with camera distance. Districts with no standing files are labelled "demolished".
+- **Picking** raycasts both instanced meshes and maps `instanceId` back to the building (O(n), fine to about 50k). Planned: a GPU ID-buffer picker for 100k+.
+- **Camera.** It circles slowly until the user touches it. Fly-to moves along an eased arc. The URL (`?repo=&focus=`) holds the view, so any link reproduces it.
+
+**Why procedural and not asset packs.** Every building has a size that comes from the data: a unique footprint and height. Stock models stretched to arbitrary proportions look wrong, and they can't carry per-window meaning. The shader approach also stays one draw call per shape at any scale.
+
+**Scale plan.** The prototype rewrites every instance matrix per timelapse frame, which is O(N) CPU and fine to about 50k buildings. For Linux-class repos:
 
 1. **Sparse, event-driven updates.** Per-instance attributes `(h0, h1, t0)` and `(lastTouch, sign)`. The vertex shader eases height and computes glow from `uTime`, so CPU work per frame is proportional to the buildings changed in that frame, not to N.
 2. **LOD.** Distant districts collapse into single blocks (the merged footprint at the max height percentile) and expand as the camera approaches.
-3. **Labels.** SDF text (e.g. troika-three-text) for the top districts only, fading with distance.
-4. **WebGPU** via three's `WebGPURenderer` once the capture path is stable, as an optional upgrade.
+3. **WebGPU** via three's `WebGPURenderer` once the capture path is stable, as an optional upgrade.
+
+## 4b. Code view: entering a building (`src/reader.js`)
+
+**A building is its file, and its floors are its lines, bottom-up.**
+
+- **Opening a building** (double-click, `Enter`, or the button) fetches the file from `raw.githubusercontent.com` at the bundle's `head` SHA. That host serves CORS, so no server is needed. highlight.js is lazy-loaded as a separate chunk, so the first page load doesn't pay for it.
+- **Elevator.** Scrolling reports the visible line range. `bandOf()` maps it to a band of floors, the shader lights that band cyan (`uFocus`, `uBand`), and the camera eases to face that height. `camera.setViewOffset` shifts the projection so the building sits left of the code panel.
+- **X-ray.** In a dense city, neighbours block the view. While a building is open, fragments of *other* buildings near the segment camera → focus are discarded with a dithered falloff (`uCamPos`, `uFocusPos`, `uTunnel`). This is the cutaway trick games use. It is cheaper and more robust than searching for an unobstructed camera angle.
+- Local repositories, which have no GitHub URL, can't show code yet. Planned: serve file contents from the ingest cache in dev mode.
+
+## 4c. Offline renderer: Blender (`tools/blender/render_city.py`)
+
+This renderer is for posters, README heroes, wallpapers and social thumbnails. It reads the same bundle and uses the same visual language, but path-traces with **Cycles**.
+
+- **Geometry.** All buildings go into one mesh. Side faces get **UVs in world units** (u along the face, v up from the base), so a single shader-node window grid works on every building. Per-face attributes (`lit`, `seed`, `top_h`, `ruin`, `face_id`, `hue`) drive the same rules as the web shader.
+- **Materials.** Windows are metallic glass when unlit and emissive (warm or cool) when lit. The street is wet asphalt: a noise-driven roughness gives mirror-like puddles. District frames are emissive in the district's hue. Commit beams are emission added to transparency.
+- **Atmosphere.** A world gradient with stars, plus **haze in a bounded box** around the city. A world volume would be infinitely deep and swallow the sky.
+- **Output.** Blender 5 compositor (`scene.compositing_node_group`) with Glare → Bloom, and AgX (Punchy) view transform. It renders on the GPU (OptiX, then CUDA, then CPU) with denoising.
+- `--at YYYY-MM-DD` replays history to that day, which gives true "then vs now" pairs from the same camera.
+- **Next:** keyframed Blender animation of the timelapse, for the hero video.
 
 ## 5. Timelapse (`src/timelapse.js`)
 
@@ -198,15 +236,20 @@ Given the eras, the key events and the city geometry, Claude writes a **shot lis
 | 5 | Voyage embeddings; Claude for generation | Anthropic has no embedding model and recommends Voyage. |
 | 6 | Deterministic capture instead of screen recording | No dropped frames, and results are reproducible. This is the method Gource videos use. |
 | 7 | Verified tours instead of a chat panel | The camera must never fly to a hallucinated location. |
+| 8 | Procedural buildings and shaders, not asset packs | Sizes come from the data, and each window carries meaning; it also stays a few draw calls at any scale. |
+| 9 | Floors = lines of code | Connects the 3D view with the code: reading a file is riding up its building. |
+| 10 | X-ray cutaway instead of camera collision avoidance | A dense treemap city has no clear sightlines; dissolving occluders always works. |
+| 11 | Blender/Cycles for stills, three.js for interaction | Path tracing gives poster quality from the same data, with no compromise in the live viewer. |
 
 ## Roadmap
 
-- **M0: done (this commit).** Ingest with rename and demolition identity; all-time layout; instanced renderer with bloom; timelapse with scrubbing; path search with fly-to; deep links; capture hooks.
-- **M1: the first video.** Capture driver (Playwright + ffmpeg), camera keyframes, date and caption overlay, 16:9 and 9:16. Ship "Express: 17 years in 30 seconds", then React.
+- **M0: done.** Ingest with rename and demolition identity; all-time layout; instanced renderer with bloom; timelapse with scrubbing; path search with fly-to; deep links; capture hooks.
+- **M0.5: done.** The night-city visual language (lit windows = recency, neon crowns, commit beams, towers, spires, labels); entering a building (code view, floors = lines, elevator, x-ray); Blender poster renderer; layout fix for identities that share a path.
+- **M1: the first video.** Capture driver (Playwright + ffmpeg), camera keyframes, date and caption overlay, 16:9 and 9:16. Ship "Express: 17 years in 30 seconds", then React. Option: a keyframed Blender animation for the hero cut.
 - **M2: scale.** Binary bundle, time buckets, sparse GPU updates, LOD. Target: Linux.
 - **M3: the AI guide.** Voyage embeddings, the guide API with verified tours, district names, eras.
 - **M4: distribution.** Gallery site, URL-swap domain, README Action/badge, share cards, compare mode, MCP server.
-- **M5: signature visuals.** Code strata, the semantic layout morph, day/night by commit hour.
+- **M5: more signature visuals.** Code strata (blame age per floor), a facade minimap of the code seen up close, the semantic layout morph, day/night by commit hour.
 
 ## Risks
 

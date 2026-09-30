@@ -24,6 +24,22 @@
       <div id="info-body"></div>
     </aside>
 
+    <section id="reader" hidden aria-label="Code">
+      <header>
+        <div class="reader-title">
+          <div id="reader-path"></div>
+          <div id="reader-meta"></div>
+        </div>
+        <a id="reader-gh" target="_blank" rel="noopener">GitHub ↗</a>
+        <button id="reader-close" aria-label="Leave building">Exit ⎋</button>
+      </header>
+      <div id="reader-floor"></div>
+      <div class="reader-body">
+        <pre id="reader-gutter"></pre>
+        <pre class="hljs"><code id="reader-code"></code></pre>
+      </div>
+    </section>
+
     <footer class="bar bottom">
       <button id="play" aria-label="Play history">▶</button>
       <input id="timeline" type="range" min="0" max="1000" value="1000" aria-label="Timeline" />
@@ -34,7 +50,8 @@
     </footer>
 
     <div id="legend">
-      <span><i class="dot hot"></i>hot files (most commits)</span>
+      <span><i class="dot lit"></i>lit windows = recent work</span>
+      <span><i class="dot hot"></i>commit (growth)</span>
       <span><i class="dot del"></i>deletion</span>
       <span><i class="dot ruin"></i>demolished file</span>
     </div>

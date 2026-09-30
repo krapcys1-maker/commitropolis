@@ -59,7 +59,7 @@ Wettel, Lanza & Robbes ran a controlled experiment on CodeCity ([ICSE 2011](http
 2. **Cinematic export.** A deterministic frame renderer produces 60 fps MP4 at 16:9 and 9:16, with a date counter and era captions. A gallery of famous repos is pre-rendered.
 3. **AI director + grounded guide.** Eras come from churn change-points and are labelled from commit messages. "Show me where login happens" returns a multi-stop camera tour whose citations are verified against the file text before the camera moves. Tours are shareable links and can be rendered to video.
 4. **Scale.** Linux-class repos run at 60 fps thanks to time-bucketed deltas, sparse GPU updates and prebaked bundles.
-5. **Signature visuals that carry meaning.** Code strata (blame age per floor), demolitions, and a morph between the folder layout and a semantic (embedding) layout that shows where the architecture and the folder tree disagree.
+5. **Signature visuals that carry meaning.** Lit windows mean recent work, so abandoned code goes dark. Commits are beams of light. Floors are lines of code: walking into a building opens its code, and scrolling rides an elevator up the facade. Next come code strata (blame age per floor), demolition scenes, and a morph between the folder layout and a semantic (embedding) layout that shows where the architecture and the folder tree disagree.
 6. **Built-in distribution.** URL swap, a README Action/badge that renders your repo's timelapse, share cards, a compare view, an embeddable iframe, and an MCP server ("show this in the city").
 
 ## Naming
