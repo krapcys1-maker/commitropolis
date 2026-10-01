@@ -108,8 +108,11 @@ const list = [...accounts.values()].map((a) => {
 const orgsByStars = list.filter((a) => a.t === 'O').sort((x, y) => y.s - x.s);
 const titans = new Set(orgsByStars.slice(0, 24).filter((a) => a.ai < 0.5).map((a) => a.l));
 const idCut = list.map((a) => a.i).sort((x, y) => x - y)[Math.floor(list.length * 0.08)];
+// AI labs belong to the AI Nebula even when their repos aren't tagged as AI (docs/LORE.md).
+const AI_ORGS = new Set(['anthropics', 'openai', 'huggingface', 'pytorch', 'ollama', 'google-deepmind', 'deepseek-ai', 'meta-llama', 'mistralai', 'langchain-ai', 'ggml-org', 'qwenlm', 'lm-sys', 'vllm-project', 'unslothai']);
 for (const a of list) {
-  if (a.arch > 0.8 || now - a.pushed > 2 * 365 * 86400) a.sector = 'silent';
+  if (AI_ORGS.has(a.l.toLowerCase())) a.sector = 'ai';
+  else if (a.arch > 0.8 || now - a.pushed > 2 * 365 * 86400) a.sector = 'silent';
   else if (a.ai >= 0.5 && a.s >= 2000) a.sector = 'ai';
   else if (titans.has(a.l)) a.sector = 'titan';
   else if (a.i <= idCut && a.s >= 5000) a.sector = 'ancient';

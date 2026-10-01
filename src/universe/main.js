@@ -10,6 +10,7 @@ import { FinishShader } from '../materials.js';
 import { PlanetView } from './planetView.js';
 import { GalaxyView } from './galaxyView.js';
 import { SystemView } from './systemView.js';
+import { OrgView } from './orgView.js';
 import { LEVELS, SECTORS, PROLOGUE } from './lore.js';
 import './ui.css';
 
@@ -115,6 +116,7 @@ const ui = {
 const ctx = { renderer, camera, controls, ui, composer };
 const views = { galaxy: new GalaxyView(ctx), planet: new PlanetView(ctx) };
 views.system = new SystemView(ctx, views.galaxy);
+views.org = new OrgView(ctx, views.galaxy);
 let current = null;
 
 async function go(route, { push = true } = {}) {
@@ -122,13 +124,23 @@ async function go(route, { push = true } = {}) {
   ui.card('');
   $('tooltip').hidden = true;
   try {
-    if (route.planet) {
+    if (route.planet || route.system) {
       await views.galaxy.load();
+      const login = route.planet ?? route.system;
+      if (views.galaxy.account(login)?.t === 'O') route = { system: login };
+    }
+    if (route.planet) {
       const planet = await views.planet.enter(route.planet);
+      if (planet.redirect === 'org') return go({ system: planet.login }, { push });
       current = views.planet;
       const sector = views.galaxy.sectorOf(route.planet);
       ui.crumbs([{ label: 'Commitverse', href: './' }, { label: SECTORS[sector]?.name ?? 'The Language Arms', href: `./?sector=${sector}` }, { label: 'System', href: `./?system=${encodeURIComponent(planet.data.login)}` }, { label: `@${planet.data.login}` }]);
       document.title = `@${planet.data.login} · Commitverse`;
+    } else if (route.system && (views.galaxy.account(route.system)?.t === 'O' || (await fetch(`universe/orgs/${route.system.toLowerCase()}.json`).then((r) => (r.headers.get('content-type') ?? '').includes('json')).catch(() => false)))) {
+      const org = await views.org.enter(route.system);
+      current = views.org;
+      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: org.sector.name, href: `./?sector=${views.galaxy.sectorOf(route.system)}` }, { label: `★ @${views.org.data.login}` }]);
+      document.title = `★ @${views.org.data.login} · Commitverse`;
     } else if (route.system) {
       const home = views.planet.data?.login?.toLowerCase() === route.system.toLowerCase() ? views.planet : null;
       const fallback = home ? { l: home.data.login, s: home.planet?.stars ?? 0, lang: home.planet?.mainLanguage ?? 'Other', sector: 'arm', top: [] } : { l: route.system, s: 0, lang: 'Other', sector: 'arm', top: [] };

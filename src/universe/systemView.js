@@ -9,7 +9,7 @@ const ORBITS = [140, 200, 265, 335, 410, 490, 575, 665];
 
 // A small world as seen from across its star system: noise continents in its language style,
 // lit by the star, with a thin atmosphere rim and night lights for developed worlds.
-function worldMaterial(account, sunPos) {
+export function worldMaterial(account, sunPos) {
   const style = worldStyle(account.lang);
   const level = levelOf(account.s).level;
   const seed = hashString(account.l);

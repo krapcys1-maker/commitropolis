@@ -305,3 +305,6 @@ ul.cities .stars { font: 12px var(--mono); color: var(--gold); }
 #survey li.now { color: #fff; }
 #survey li.now::marker { content: '◌  '; }
 #survey .survey-note { margin-top: 6px; color: var(--gold); font-size: 12px; }
+
+.world-label.structure { border-color: rgba(255, 255, 255, 0.18); }
+.world-label.structure.mapped { border-color: rgba(127, 212, 255, 0.55); color: #dff4ff; }

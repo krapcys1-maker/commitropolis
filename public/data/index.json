@@ -202,5 +202,59 @@
     "name": "tj/commander.js",
     "files": 218,
     "commits": 1111
+  },
+  {
+    "slug": "anthropics-claude-code",
+    "name": "anthropics/claude-code",
+    "files": 1523,
+    "commits": 756
+  },
+  {
+    "slug": "anthropics-anthropic-sdk-python",
+    "name": "anthropics/anthropic-sdk-python",
+    "files": 2168,
+    "commits": 1436
+  },
+  {
+    "slug": "openai-openai-python",
+    "name": "openai/openai-python",
+    "files": 2358,
+    "commits": 1668
+  },
+  {
+    "slug": "openai-whisper",
+    "name": "openai/whisper",
+    "files": 40,
+    "commits": 168
+  },
+  {
+    "slug": "microsoft-markitdown",
+    "name": "microsoft/markitdown",
+    "files": 149,
+    "commits": 318
+  },
+  {
+    "slug": "vercel-swr",
+    "name": "vercel/swr",
+    "files": 343,
+    "commits": 958
+  },
+  {
+    "slug": "huggingface-smolagents",
+    "name": "huggingface/smolagents",
+    "files": 184,
+    "commits": 1028
+  },
+  {
+    "slug": "ollama-ollama",
+    "name": "ollama/ollama",
+    "files": 1223,
+    "commits": 5000
+  },
+  {
+    "slug": "rust-lang-rustlings",
+    "name": "rust-lang/rustlings",
+    "files": 289,
+    "commits": 2532
   }
 ]

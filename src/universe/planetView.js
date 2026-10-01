@@ -57,6 +57,7 @@ export class PlanetView {
   async enter(login) {
     const { camera, controls, ui } = this.ctx;
     const [data, index] = await Promise.all([loadPlanet(login), loadCityIndex()]);
+    if (data.type === 'Organization') return { redirect: 'org', login: data.login }; // organisations are stars
     this.clear();
     this.data = data;
     this.planet = new Planet(this.ctx.renderer, data, index);
