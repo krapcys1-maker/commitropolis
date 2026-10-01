@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Sky, radialTexture } from './sky.js';
 import { GALAXIES, loadCosmos, universeLayout, sampleDust, dustColor, knotsOf, placeMembers, yearOfId, gauss } from './cosmos.js';
 import { hashString, rng, langColor, levelOf } from './lore.js';
+import { declutter } from './declutter.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 // from high above the cluster, so its ring of galaxies spreads across the screen
@@ -518,5 +519,8 @@ export class UniverseView {
     }
     const d = this.ctx.camera.position.length();
     for (const g of this.galaxies ?? []) g.label.element.style.opacity = Math.min(1, d / 9000);
+    // the biggest galaxies keep their names when two line up; comets give way to both
+    this.labelOrder ??= [...this.galaxies].sort((a, b) => (b.spec.id === 'titan') - (a.spec.id === 'titan') || b.count - a.count).map((g) => ({ label: g.label, wanted: true }));
+    declutter([...this.labelOrder, ...(this.comets ?? []).map((c) => ({ label: c.label, wanted: c.head.visible }))], this.ctx.camera, 4);
   }
 }

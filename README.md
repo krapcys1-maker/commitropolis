@@ -11,7 +11,7 @@
 [![The Big Bang of open source: a 72-second film. Click to watch it with sound](docs/img/teaser.webp)](https://krapcys1-maker.github.io/commitverse/media/commitverse-bigbang.mp4)
 <sub>▶ **Click to watch the film with sound**: *The Big Bang of open source* (72 s, 1080p). It starts at the git singularity, watches the worlds light up year by year, lands on @karpathy's world, and goes down into llm.c until it reaches one line of CUDA. Every frame is the live app, rendered frame by frame by [tools/video](tools/video), and the soundtrack is synthesised to match. Also on the [release page](https://github.com/krapcys1-maker/commitverse/releases/latest).</sub>
 
-**[Open the Commitverse →](https://krapcys1-maker.github.io/commitverse/)**
+**[Open the Commitverse →](https://krapcys1-maker.github.io/commitverse/)** · **Find your own world:** `krapcys1-maker.github.io/commitverse/?home=<your-login>` makes the autopilot fly you home ([try @torvalds](https://krapcys1-maker.github.io/commitverse/?home=torvalds))
 
 ## A cluster of galaxies
 

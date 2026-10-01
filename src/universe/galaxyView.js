@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Sky, radialTexture } from './sky.js';
 import { SECTORS, langColor, hashString, rng, levelOf } from './lore.js';
 import { GALAXY, loadCosmos, yearOfId, knotsOf, sampleDust, dustColor, placeMembers, armAngle as armAngleOf } from './cosmos.js';
+import { declutter } from './declutter.js';
 
 const RG = 1000; // galaxy radius
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
@@ -178,7 +179,7 @@ export class GalaxyView {
   // The galaxy as of a given year (the film); 3000 = today.
   setYear(year) {
     this.year.value = year;
-    for (const b of this.beacons ?? []) b.label.visible = year >= b.born;
+    for (const b of this.beacons ?? []) b.wanted = year >= b.born;
     for (const p of this.puffs ?? []) {
       const on = p.ignite ? THREE.MathUtils.smoothstep(year, p.ignite[0], p.ignite[1]) : THREE.MathUtils.smoothstep(year, p.born, p.born + 0.6);
       p.sp.material.opacity = p.opacity * (p.ignite ? on * 1.8 : on);
@@ -801,14 +802,15 @@ export class GalaxyView {
       return label;
     };
     // a beacon appears with its world (the time machine)
-    this.beacons = this.data.accounts.slice(0, 7).map((a, i) => ({ born: this.yearOf(a), label: add(`@${a.l}<small>${fmt(a.s)} ★</small>`, this.worldPos[i].clone().add(new THREE.Vector3(0, 16, 0)), 'world-label beacon', () => this.visit(a.l)) }));
+    this.beacons = this.data.accounts.slice(0, 12).map((a, i) => ({ born: this.yearOf(a), wanted: true, label: add(`@${a.l}<small>${fmt(a.s)} ★</small>`, this.worldPos[i].clone().add(new THREE.Vector3(0, 16, 0)), 'world-label beacon', () => this.visit(a.l)) }));
+    this.armLabels = [];
     const langs = this.spec.langs ?? [];
     const arms = this.spec.arms ?? 4;
     if (langs.length > 1) {
       for (let k = 0; k < Math.min(arms, langs.length); k++) {
         const r = RG * 0.7;
         const a = armAngleOf(k, r, RG, arms, this.spec.pitch);
-        add(`${langs[k]}`, new THREE.Vector3(Math.cos(a) * r, 30, Math.sin(a) * r), 'sector-label', null, langColor(langs[k]));
+        this.armLabels.push({ wanted: true, label: add(`${langs[k]}`, new THREE.Vector3(Math.cos(a) * r, 30, Math.sin(a) * r), 'sector-label', null, langColor(langs[k])) });
       }
     }
   }
@@ -930,6 +932,8 @@ export class GalaxyView {
         then?.();
       }
     }
+    // the brightest worlds keep their names; any that would sit on top of a brighter one step aside
+    if (this.beacons) declutter([...this.beacons, ...this.armLabels], this.ctx.camera);
     const camDist = this.ctx.camera.position.distanceTo(this.ctx.controls.target);
     for (const label of this.labels) label.element.style.opacity = Math.min(1, camDist / 500);
   }
