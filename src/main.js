@@ -16,6 +16,7 @@ import { fetchCity, apiBase, mapCity } from './config.js';
 import { CityEvents } from './cityEvents.js';
 import { Traffic } from './traffic.js';
 import { ScaleHud, watchZoom } from './scale.js';
+import { Sound } from './sound.js';
 import { GALAXY, galaxyIdOf } from './universe/cosmos.js';
 
 const $ = (id) => document.getElementById(id);
@@ -49,7 +50,9 @@ labelRenderer.domElement.addEventListener(
 );
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, W() / H(), 0.3, 8000);
+// On a phone held upright, keep the width of view a landscape screen has, instead of a keyhole.
+const fovFor = (aspect) => (aspect >= 1 ? 45 : Math.min(80, (2 * Math.atan(Math.tan((22.5 * Math.PI) / 180) / aspect) * 180) / Math.PI));
+const camera = new THREE.PerspectiveCamera(fovFor(W() / H()), W() / H(), 0.3, 8000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.495;
@@ -79,6 +82,7 @@ composer.setSize(W(), H());
 
 function resize() {
   camera.aspect = W() / H();
+  if (!params.has('director')) camera.fov = fovFor(camera.aspect);
   if (reader.open) camera.setViewOffset(innerWidth, innerHeight, innerWidth * 0.22, 0, innerWidth, innerHeight);
   camera.updateProjectionMatrix();
   renderer.setSize(W(), H());
@@ -100,8 +104,14 @@ let captionUntil = 0; // on the frame clock, so captions behave the same live an
 let ascending = null; // rising out of the city, up through the clouds to its world
 let traffic = null; // car lights on the streets (traffic.js)
 const scale = new ScaleHud();
+const sound = new Sound();
+if (!params.has('director')) {
+  sound.attach($('sound-btn'));
+  sound.mood('city');
+}
 
 function showCaption(text) {
+  if (text.startsWith('🚀')) sound.rocket();
   const el = $('caption');
   el.textContent = text;
   el.classList.add('show');
@@ -161,7 +171,13 @@ async function load(slug, focus) {
   city.group.add(traffic.points);
   timelapse = new Timelapse(city);
   timelapse.onCommit = showCommit;
-  events = new CityEvents(city, { caption: showCaption, shake: (amp, dur) => (shake = { amp, dur, t: dur }) });
+  events = new CityEvents(city, {
+    caption: showCaption,
+    shake: (amp, dur) => {
+      shake = { amp, dur, t: dur };
+      sound.boom();
+    },
+  });
   timelapse.onApply = (i, c) => events.onCommit(i, c);
   timelapse.onSeek = (t) => events.reset(t);
   selected = -1;
@@ -281,6 +297,7 @@ function cityLadder() {
 
 function ascend() {
   if (ascending || !data || !owner()) return;
+  sound.whoosh(true);
   exitBuilding();
   flight = null;
   controls.enabled = false;

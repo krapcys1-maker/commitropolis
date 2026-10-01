@@ -15,6 +15,7 @@ import { OrgView } from './orgView.js';
 import { LEVELS, PROLOGUE } from './lore.js';
 import { GALAXY, GALAXIES, accountOf, galaxyIdOf } from './cosmos.js';
 import { ScaleHud, watchZoom } from '../scale.js';
+import { Sound } from '../sound.js';
 import { catalogOf } from './systemView.js';
 import './ui.css';
 
@@ -46,7 +47,9 @@ labelRenderer.domElement.addEventListener(
   { passive: false }
 );
 
-const camera = new THREE.PerspectiveCamera(45, W() / H(), 0.5, 20000);
+// On a phone held upright, keep the width of view a landscape screen has, instead of a keyhole.
+const fovFor = (aspect) => (aspect >= 1 ? 45 : Math.min(80, (2 * Math.atan(Math.tan((22.5 * Math.PI) / 180) / aspect) * 180) / Math.PI));
+const camera = new THREE.PerspectiveCamera(fovFor(W() / H()), W() / H(), 0.5, 20000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
@@ -64,6 +67,7 @@ composer.setSize(W(), H());
 
 addEventListener('resize', () => {
   camera.aspect = W() / H();
+  if (!params.has('director')) camera.fov = fovFor(camera.aspect);
   camera.updateProjectionMatrix();
   renderer.setSize(W(), H());
   labelRenderer.setSize(W(), H());
@@ -130,6 +134,8 @@ const ui = {
 };
 
 const scale = new ScaleHud();
+const sound = new Sound();
+if (!params.has('director')) sound.attach($('sound-btn'));
 const ctx = { renderer, camera, controls, ui, composer, scale, time: 0 };
 const views = { universe: new UniverseView(ctx), planet: new PlanetView(ctx) };
 // one view per galaxy, built on first visit; 'all' is every world in one galaxy, as in the film
@@ -153,6 +159,7 @@ const isOrg = async (login) =>
 let leaving = null;
 function leave(then) {
   if (leaving) return;
+  sound.whoosh(true);
   scale.reset();
   controls.autoRotate = false;
   leaving = { t: 0, then, offset: camera.position.clone().sub(controls.target) };
@@ -258,6 +265,11 @@ async function go(route, { push = true } = {}) {
     }
     show(current.scene);
     ladder();
+    // the time machine belongs to the galaxies
+    $('time').hidden = !(current instanceof GalaxyView) || params.has('director');
+    for (const g of Object.values(galaxyViews)) if (g !== current) g.resetTime?.();
+    sound.mood(current === views.universe ? 'universe' : current instanceof GalaxyView ? 'galaxy' : current === views.planet ? 'planet' : 'system');
+    if (route.fromUniverse || route.fromStar || route.fromWorld) sound.whoosh(false);
     // only where we are goes into history, not how we got here
     const state = route.planet ? { planet: route.planet } : route.system ? { system: route.system } : route.galaxy ? { galaxy: route.galaxy } : {};
     const url = route.planet ? `?planet=${encodeURIComponent(route.planet)}` : route.system ? `?system=${encodeURIComponent(route.system)}` : route.galaxy ? `?galaxy=${route.galaxy}` : './';

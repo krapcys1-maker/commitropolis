@@ -212,11 +212,15 @@ button.primary {
 }
 
 @media (max-width: 720px) {
-  .brand { display: none; }
-  select { max-width: 120px; }
+  .brand, .lbl { display: none; }
+  .bar { gap: 6px; padding: 8px; left: 10px; right: 10px; }
+  select { flex: 1; min-width: 0; max-width: none; }
+  .bar.top .search { display: none; }
+  .orbit { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
   #commit { display: none; }
   #legend { display: none; }
   #reader { left: 16px; width: auto; top: 45vh; }
+  #scale { bottom: 96px; }
 }
 
 .brand { color: var(--text); text-decoration: none; }

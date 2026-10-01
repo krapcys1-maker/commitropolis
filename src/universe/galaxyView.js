@@ -178,6 +178,7 @@ export class GalaxyView {
   // The galaxy as of a given year (the film); 3000 = today.
   setYear(year) {
     this.year.value = year;
+    for (const b of this.beacons ?? []) b.label.visible = year >= b.born;
     for (const p of this.puffs ?? []) {
       const on = p.ignite ? THREE.MathUtils.smoothstep(year, p.ignite[0], p.ignite[1]) : THREE.MathUtils.smoothstep(year, p.born, p.born + 0.6);
       p.sp.material.opacity = p.opacity * (p.ignite ? on * 1.8 : on);
@@ -231,11 +232,47 @@ export class GalaxyView {
     }
     ui.card(this.#cardHtml(route.sector));
     this.#wireCard();
+    this.#wireTime();
     ui.hint('Drag to rotate · zoom toward any star and keep going to enter its system · click a star to visit its world');
   }
 
   get ownsFade() {
     return !!this.flying?.fadeIn;
+  }
+
+  // The time machine: scrub a galaxy back through the years, or watch it form from 2008 to today.
+  #wireTime() {
+    const range = document.getElementById('time-range');
+    const play = document.getElementById('time-play');
+    if (!range) return;
+    this.timePlay = null;
+    this.setYear(3000);
+    range.value = range.max;
+    this.#showYear(Number(range.max));
+    range.oninput = () => {
+      this.timePlay = null;
+      const y = Number(range.value);
+      this.setYear(y >= Number(range.max) - 0.01 ? 3000 : y);
+      this.#showYear(y);
+    };
+    play.onclick = () => {
+      this.timePlay = { t: 0 };
+      this.ctx.controls.autoRotate = true;
+    };
+  }
+
+  #showYear(y) {
+    const el = document.getElementById('time-year');
+    if (!el) return;
+    const shown = Math.min(2026, Math.floor(y));
+    const worlds = this.data.accounts.reduce((n, a) => n + (this.yearOf(a) <= y ? 1 : 0), 0);
+    el.innerHTML = `${shown}<small>${worlds.toLocaleString('en-US')} worlds</small>`;
+  }
+
+  // leaving this galaxy: back to today, so the next visit doesn't open in the past
+  resetTime() {
+    this.timePlay = null;
+    if (this.built) this.setYear(3000);
   }
 
   zoomTarget(dir, event) {
@@ -761,8 +798,10 @@ export class GalaxyView {
       label.position.copy(at);
       this.disk.add(label);
       this.labels.push(label);
+      return label;
     };
-    this.data.accounts.slice(0, 7).forEach((a, i) => add(`@${a.l}<small>${fmt(a.s)} ★</small>`, this.worldPos[i].clone().add(new THREE.Vector3(0, 16, 0)), 'world-label beacon', () => this.visit(a.l)));
+    // a beacon appears with its world (the time machine)
+    this.beacons = this.data.accounts.slice(0, 7).map((a, i) => ({ born: this.yearOf(a), label: add(`@${a.l}<small>${fmt(a.s)} ★</small>`, this.worldPos[i].clone().add(new THREE.Vector3(0, 16, 0)), 'world-label beacon', () => this.visit(a.l)) }));
     const langs = this.spec.langs ?? [];
     const arms = this.spec.arms ?? 4;
     if (langs.length > 1) {
@@ -857,6 +896,17 @@ export class GalaxyView {
 
   update(dt, time) {
     this.uniforms.uTime.value = time;
+    if (this.timePlay) {
+      // fourteen seconds from the first commit to today, lingering on the recent years
+      this.timePlay.t += dt;
+      const k = Math.min(1, this.timePlay.t / 14);
+      const y = 2007.6 + (1 - Math.pow(1 - k, 1.6)) * 19.2;
+      this.setYear(k >= 1 ? 3000 : y);
+      const range = document.getElementById('time-range');
+      if (range) range.value = String(Math.min(y, Number(range.max)));
+      this.#showYear(y);
+      if (k >= 1) this.timePlay = null;
+    }
     // points keep their size in the picture whatever the field of view (a vertical film widens it)
     this.uniforms.uScale.value = (innerHeight * 0.9 * 0.41421356) / Math.tan((this.ctx.camera.fov * Math.PI) / 360);
     this.disk.rotation.y += dt * 0.004;

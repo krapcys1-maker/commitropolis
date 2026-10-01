@@ -78,6 +78,7 @@ input[type='search'] { width: 230px; }
 button { cursor: pointer; }
 button:hover, .hud-btn:hover { background: rgba(255, 255, 255, 0.1); }
 .hud-btn { text-decoration: none; white-space: nowrap; color: var(--gold); }
+.icon-btn { padding: 7px 10px; line-height: 1; }
 #star-btn b { font: 600 12px var(--mono); color: var(--text); margin-left: 2px; }
 #star-btn b:empty { display: none; }
 
@@ -275,11 +276,41 @@ html.ascending #fade { opacity: 1; }
 #prologue p:last-child { color: var(--gold); }
 #prologue .skip { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
 
+/* the time machine of a galaxy */
+#time {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(520px, calc(100vw - 420px));
+  min-width: 300px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  z-index: 4;
+}
+#time[hidden] { display: none; }
+#time button { flex: none; white-space: nowrap; }
+#time input { flex: 1; min-width: 0; accent-color: var(--gold); }
+#time b { flex: none; min-width: 74px; font: 600 18px/1 var(--mono); color: #fff; text-align: right; }
+#time b small { display: block; margin-top: 3px; font: 500 10px var(--mono); color: var(--accent); letter-spacing: 0.04em; }
+
+#codex-btn .sm { display: none; }
 @media (max-width: 760px) {
-  #crumbs { display: none; }
-  input[type='search'] { width: 140px; }
-  #card { top: auto; bottom: 16px; height: 42vh; right: 16px; left: 16px; width: auto; }
+  #crumbs, .spacer, .brand-name, .lbl { display: none; }
+  #codex-btn .sm { display: inline; }
+  .hud-top { gap: 8px; padding: 8px 10px; }
+  input[type='search'] { width: auto; flex: 1; min-width: 60px; }
+  #card { top: auto; bottom: 12px; height: 34vh; right: 12px; left: 12px; width: auto; padding: 14px; }
   #hint { display: none; }
+  #scale { bottom: calc(34vh + 24px); }
+  #time { bottom: calc(34vh + 20px); left: 12px; right: 12px; transform: none; width: auto; min-width: 0; }
+  #time button { font-size: 12px; }
 }
 
 .world-label {

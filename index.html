@@ -21,18 +21,24 @@
     <div id="app"></div>
 
     <header class="hud-top">
-      <a class="brand" href="./"><span class="mark"></span>COMMITVERSE</a>
+      <a class="brand" href="./"><span class="mark"></span><span class="brand-name">COMMITVERSE</span></a>
       <nav id="crumbs"></nav>
       <div class="spacer"></div>
       <input id="search" type="search" placeholder="Fly to @login or owner/repo" autocomplete="off" spellcheck="false" />
-      <a id="film-btn" class="hud-btn" href="media/commitverse-bigbang.mp4" target="_blank" rel="noopener" title="The Big Bang of open source: the film (72 s, sound on)">▶ Film</a>
-      <a id="star-btn" class="hud-btn" href="https://github.com/krapcys1-maker/commitverse" target="_blank" rel="noopener" title="Star the Commitverse on GitHub: your world joins the universe at the next daily update">★ Star <b></b></a>
-      <button id="codex-btn">Codex</button>
+      <a id="film-btn" class="hud-btn" href="media/commitverse-bigbang.mp4" target="_blank" rel="noopener" title="The Big Bang of open source: the film (72 s, sound on)">▶<span class="lbl"> Film</span></a>
+      <a id="star-btn" class="hud-btn" href="https://github.com/krapcys1-maker/commitverse" target="_blank" rel="noopener" title="Star the Commitverse on GitHub: your world joins the universe at the next daily update">★<span class="lbl"> Star</span> <b></b></a>
+      <button id="sound-btn" class="icon-btn" aria-pressed="false">🔈</button>
+      <button id="codex-btn" title="The Galactic Codex: what everything means"><span class="lbl">Codex</span><span class="sm">?</span></button>
     </header>
 
     <aside id="card" hidden></aside>
     <div id="tooltip" hidden></div>
     <div id="hint"></div>
+    <div id="time" hidden>
+      <button id="time-play" title="Watch this galaxy form, year by year">▶ Watch it form</button>
+      <input id="time-range" type="range" min="2008" max="2026.8" step="0.05" value="2026.8" aria-label="Year" />
+      <b id="time-year">2026</b>
+    </div>
     <div id="toast" hidden></div>
     <section id="survey" hidden></section>
     <div id="fade"></div>

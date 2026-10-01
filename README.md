@@ -82,6 +82,8 @@ It's one continuous zoom: **universe → galaxy → star system → world → ci
   - zoom in and you go back down, into the galaxy, the star or the city under your cursor, and finally the building.
 - **Click anything** to fly straight there.
 - **Search** `@anyone` to fly to their world, or `owner/repo` to land in that city.
+- **Turn back time.** Every galaxy has a time machine: scrub through the years, or press ▶ to watch it form from 2008 to today.
+- **Turn the sound on** (🔈) for an ambient score generated live in your browser: chords, bells, space wind, and effects for travel, rockets and impacts.
 
 | The galaxy | A world | A building's code |
 |---|---|---|
