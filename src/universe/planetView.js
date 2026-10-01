@@ -3,7 +3,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Planet, R } from './planet.js';
 import { Sky } from './sky.js';
 import { langColor, cityTier } from './lore.js';
-import { apiBase, mapCity } from '../config.js';
+import { catalogOf } from './systemView.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
@@ -53,6 +53,7 @@ export function loadCityIndex() {
 }
 
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const span = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
 
 // From a to b around the planet (never through it): slerp the direction, lerp the altitude.
 function arc(a, b, k) {
@@ -69,7 +70,8 @@ export class PlanetView {
     this.landing = null;
   }
 
-  async enter(login) {
+  // ascend: the repository we're rising from (we came up out of its city, through the clouds)
+  async enter(login, { ascend } = {}) {
     const { camera, controls, ui } = this.ctx;
     const [data, index] = await Promise.all([loadPlanet(login), loadCityIndex()]);
     if (data.type === 'Organization') return { redirect: 'org', login: data.login }; // organisations are stars
@@ -93,14 +95,89 @@ export class PlanetView {
     controls.target.set(0, 0, 0);
     controls.minDistance = R * 1.25;
     controls.maxDistance = R * 9;
+    controls.zoomToCursor = false;
     controls.enabled = true;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.25;
 
     ui.card(this.#cardHtml());
-    ui.hint('Drag to orbit · scroll to zoom · click a glowing city to land');
+    ui.hint('Drag to orbit · zoom into a glowing city to land · keep zooming out to leave orbit');
     this.#wireCard();
+    const from = ascend ? this.planet.cities.findIndex((c) => c.repo.n.toLowerCase() === ascend.toLowerCase()) : -1;
+    if (from >= 0) this.#ascend(from);
     return this.planet;
+  }
+
+  // While landing or rising through the clouds, this view draws the white-out itself.
+  get ownsFade() {
+    return !!(this.landing || this.ascending);
+  }
+
+  // The scale gesture (src/scale.js): out to this world's star system, in to the city under the cursor.
+  zoomTarget(dir, event, ray) {
+    if (!this.planet || this.landing || this.ascending) return null;
+    if (dir === 'out') return { label: `Leave orbit: System ${catalogOf(this.data.login)}`, go: () => this.zoomOut() };
+    let i = this.planet.cityAt(ray);
+    if (i < 0) i = this.#cityAhead();
+    return i < 0 ? null : { label: `Land in ${this.planet.cities[i].repo.n}`, go: () => this.land(i) };
+  }
+
+  zoomOut() {
+    this.ctx.leave(() => this.ctx.go({ system: this.data.login, fromWorld: true }));
+  }
+
+  // The city nearest the middle of the view, if one is close enough to aim at.
+  #cityAhead() {
+    const view = this.ctx.camera.position.clone().normalize();
+    const q = this.planet.group.getWorldQuaternion(new THREE.Quaternion());
+    let best = -1;
+    let bestAngle = 0.4;
+    this.planet.cities.forEach((c, i) => {
+      const angle = c.dir.clone().applyQuaternion(q).angleTo(view);
+      if (angle < bestAngle) {
+        best = i;
+        bestAngle = angle;
+      }
+    });
+    return best;
+  }
+
+  // The landing, backwards: from just above a city, up out of the clouds and back to orbit.
+  #ascend(i) {
+    const city = this.planet.cities[i];
+    this.planet.group.updateMatrixWorld(true);
+    const normal = city.dir.clone().applyQuaternion(this.planet.group.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    const tangent = new THREE.Vector3(0, 1, 0).cross(normal).normalize();
+    const sun = this.planet.uniforms.uSunDir.value;
+    this.ascending = { t: 0, normal, tangent, sunHome: sun.clone(), sunDusk: normal.clone().multiplyScalar(-0.12).add(tangent).normalize() };
+    sun.copy(this.ascending.sunDusk);
+    this.planet.spin = false;
+    this.ctx.controls.enabled = false;
+    this.ctx.controls.autoRotate = false;
+    this.#updateAscend(0);
+  }
+
+  #updateAscend(dt) {
+    const A = this.ascending;
+    const { camera, controls, ui } = this.ctx;
+    A.t += dt;
+    const cityPoint = A.normal.clone().multiplyScalar(R);
+    const low = A.normal.clone().multiplyScalar(R * 1.006).addScaledVector(A.tangent, R * 0.02);
+    const above = A.normal.clone().multiplyScalar(R * 2.1).addScaledVector(A.tangent, R * 0.35);
+    const rise = 1 - (1 - span(A.t, 0, 2.4)) ** 2;
+    const out = ease(span(A.t, 2.0, 4.4));
+    camera.position.lerpVectors(low, above, rise).lerp(above.clone().setLength(R * 3.0), out);
+    const look = cityPoint.clone().addScaledVector(A.tangent, -R * 0.4 * (1 - rise)).lerp(new THREE.Vector3(), out);
+    controls.target.copy(look);
+    camera.lookAt(look);
+    this.planet.uniforms.uSunDir.value.lerpVectors(A.sunDusk, A.sunHome, ease(span(A.t, 1.6, 4.4))).normalize();
+    ui.fade(1 - span(A.t, 0.15, 1.4));
+    if (A.t >= 4.4) {
+      this.ascending = null;
+      this.planet.spin = true;
+      controls.enabled = true;
+      controls.autoRotate = true;
+    }
   }
 
   clear() {
@@ -110,6 +187,7 @@ export class PlanetView {
     this.planet.dispose();
     this.planet = null;
     this.landing = null;
+    this.ascending = null;
   }
 
   #buildLabels() {
@@ -175,7 +253,7 @@ export class PlanetView {
   }
 
   #wireCard() {
-    this.ctx.ui.cardEl.querySelector('#leave-orbit').onclick = () => this.ctx.go({ system: this.data.login });
+    this.ctx.ui.cardEl.querySelector('#leave-orbit').onclick = () => this.zoomOut();
     this.ctx.ui.cardEl.querySelectorAll('.cities li').forEach((li) => {
       const i = Number(li.dataset.i);
       li.onmouseenter = () => this.#hover(i);
@@ -190,7 +268,7 @@ export class PlanetView {
   }
 
   pointerMove(event, ray) {
-    if (!this.planet || this.landing) return;
+    if (!this.planet || this.landing || this.ascending) return;
     const i = this.planet.cityAt(ray);
     this.#hover(i);
     const tip = this.ctx.ui.tooltipEl;
@@ -199,14 +277,14 @@ export class PlanetView {
       return;
     }
     const c = this.planet.cities[i];
-    tip.innerHTML = `<b>${c.repo.n}</b> · ${c.tier}<br>${fmt(c.repo.s)} ★ · ${c.repo.lang ?? 'n/a'}${c.repo.d ? `<br><span class="desc">${c.repo.d}</span>` : ''}<br><em>${c.slug ? 'Click to land' : 'Uncharted: click to survey it'}</em>`;
+    tip.innerHTML = `<b>${c.repo.n}</b> · ${c.tier}<br>${fmt(c.repo.s)} ★ · ${c.repo.lang ?? 'n/a'}${c.repo.d ? `<br><span class="desc">${c.repo.d}</span>` : ''}<br><em>${c.slug ? 'Click to land · its whole history' : 'Click to land · history not surveyed yet'}</em>`;
     tip.style.left = `${Math.min(event.clientX + 16, innerWidth - 320)}px`;
     tip.style.top = `${event.clientY + 16}px`;
     tip.hidden = false;
   }
 
   click(ray) {
-    if (!this.planet || this.landing) return;
+    if (!this.planet || this.landing || this.ascending) return;
     const i = this.planet.cityAt(ray);
     if (i >= 0) this.land(i);
   }
@@ -215,10 +293,6 @@ export class PlanetView {
   land(i) {
     const city = this.planet.cities[i];
     const { ui, camera, controls } = this.ctx;
-    if (!city.slug) {
-      this.#survey(i);
-      return;
-    }
     controls.enabled = false;
     controls.autoRotate = false;
     this.ctx.ui.tooltipEl.hidden = true;
@@ -236,33 +310,6 @@ export class PlanetView {
       sunTo: normal.clone().multiplyScalar(-0.12).add(tangent).normalize(),
     };
     ui.hint(`Descending to ${city.repo.n}…`);
-  }
-
-  // An uncharted city: ask the mapping service to survey it, show progress, then land.
-  async #survey(i) {
-    const city = this.planet.cities[i];
-    const { ui } = this.ctx;
-    const repo = `${this.data.login}/${city.repo.n}`;
-    if (!(await apiBase())) {
-      ui.toast(`<b>${city.repo.n}</b> is uncharted: its history hasn't been mapped yet. <a href="https://github.com/${repo}" target="_blank" rel="noopener">View on GitHub ↗</a>`);
-      return;
-    }
-    if (this.surveying) return;
-    this.surveying = true;
-    ui.survey(repo, 'queued');
-    try {
-      city.slug = await mapCity(repo, (job) => ui.survey(repo, job.step, job.position));
-      ui.survey(repo, 'done');
-      setTimeout(() => {
-        ui.survey(null);
-        this.land(i);
-      }, 700);
-    } catch (err) {
-      ui.survey(null);
-      ui.toast(`Couldn't map <b>${city.repo.n}</b>: ${err.message}`);
-    } finally {
-      this.surveying = false;
-    }
   }
 
   #updateLanding(dt) {
@@ -289,7 +336,9 @@ export class PlanetView {
     ui.fade(Math.max(0, (descend - 0.72) / 0.28));
     if (L.t > 4.7 && !L.done && !this.noNavigate) {
       L.done = true;
-      location.href = `city.html?repo=${encodeURIComponent(L.city.slug)}&from=${encodeURIComponent(this.data.login)}&arrive=1`;
+      // a surveyed city has its whole history; any other is raised live from GitHub (src/liveCity.js)
+      const repo = L.city.slug ?? `${this.data.login}/${L.city.repo.n}`;
+      location.href = `city.html?repo=${encodeURIComponent(repo)}&from=${encodeURIComponent(this.data.login)}&arrive=1`;
     }
   }
 
@@ -297,6 +346,7 @@ export class PlanetView {
     if (!this.planet) return;
     this.planet.update(this.planet.spin === false ? 0 : dt, time);
     if (this.landing) this.#updateLanding(dt);
+    if (this.ascending) this.#updateAscend(dt);
     this.sky.update(this.ctx.camera, this.planet.uniforms.uSunDir.value);
 
     // labels: only the side facing the camera, fading at the limb
@@ -304,7 +354,7 @@ export class PlanetView {
     for (const { label, city } of this.labels) {
       const world = city.dir.clone().applyQuaternion(this.planet.group.getWorldQuaternion(new THREE.Quaternion()));
       const facing = world.dot(camDir);
-      label.element.style.opacity = this.landing ? 0 : Math.max(0, Math.min(1, (facing - 0.25) * 3));
+      label.element.style.opacity = this.landing || this.ascending ? 0 : Math.max(0, Math.min(1, (facing - 0.25) * 3));
     }
   }
 }

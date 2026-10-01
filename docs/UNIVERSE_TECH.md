@@ -41,7 +41,7 @@ GitHub has **180M+ developers and 630M repositories** ([Octoverse 2025](https://
 | Spaceships and props | Quaternius, Kenney | CC0 | Contributor ships, spaceports, release rockets |
 | HDRIs and textures | Poly Haven | CC0 | Blender renders |
 
-## Status (2026-10-01)
+## Status (2026-10-02)
 
 | Piece | State | Where |
 |---|---|---|
@@ -54,6 +54,10 @@ GitHub has **180M+ developers and 630M repositories** ([Octoverse 2025](https://
 | Mapping service: uncharted cities surveyed on demand, with progress | ✅ v0 (runs locally and in Docker; not hosted yet) | `server/`, `src/config.js` |
 | Live events: supernovae, release rockets, asteroid impacts, galactic news | ✅ v0 | `tools/universe/events.mjs`, `src/cityEvents.js` |
 | The film, "The Big Bang of open source": director mode, frame-by-frame capture, synthesised score | ✅ | `src/universe/director.js`, `src/cityDirector.js`, `tools/video/` |
+| The cluster: 14 galaxies by kind of code, git at the centre, migration comets | ✅ v0 | `src/universe/cosmos.js`, `universeView.js` |
+| One continuous zoom from the cluster to a line (scale ladder, push past a scale's limit) | ✅ | `src/scale.js`, every view's `zoomTarget()` |
+| A city for any public repository, raised live from the GitHub API (4 requests) | ✅ | `src/liveCity.js` |
+| A living universe: daily reseed, migration log, joining by star | ✅ v0 | `tools/universe/seed.mjs`, `.github/workflows/universe.yml` |
 
 Implementation notes:
 - **Terrain is baked once per world into a half-float cube map** (height in R, clouds in G), plus an equirectangular land mask read back to the CPU for placing cities. Per-frame shading then samples only textures.

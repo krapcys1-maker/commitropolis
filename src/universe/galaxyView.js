@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Sky, radialTexture } from './sky.js';
 import { SECTORS, langColor, hashString, rng, levelOf } from './lore.js';
+import { GALAXY, loadCosmos, yearOfId, knotsOf, sampleDust, dustColor, placeMembers, armAngle as armAngleOf } from './cosmos.js';
 
 const RG = 1000; // galaxy radius
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
@@ -111,9 +112,12 @@ function starMaterial(uniforms) {
   });
 }
 
+// One galaxy of the Commitverse (cosmos.js): its dust, its member worlds, its protostars. The spec
+// 'all' is every world in a single galaxy with the old sectors, as in the film.
 export class GalaxyView {
-  constructor(ctx) {
+  constructor(ctx, spec = GALAXY.all) {
     this.ctx = ctx;
+    this.spec = spec;
     this.scene = new THREE.Scene();
     this.sky = new Sky(this.scene, { brightness: 0.22 });
     this.disk = new THREE.Group();
@@ -124,16 +128,26 @@ export class GalaxyView {
     this.built = false;
   }
 
+  get legacy() {
+    return this.spec.id === 'all';
+  }
+
   async load() {
-    this.dataPromise ??= fetch('universe/galaxy.json').then((r) => r.json());
-    this.data = await this.dataPromise;
-    this.byLogin ??= new Map(this.data.accounts.map((a, i) => [a.l.toLowerCase(), i]));
-    this.worldPos ??= placeWorlds(this.data.accounts);
-    this.newsPromise ??= fetch('universe/events.json')
-      .then((r) => ((r.headers.get('content-type') ?? '').includes('json') ? r.json() : { events: [] }))
-      .catch(() => ({ events: [] }));
-    this.news = (await this.newsPromise).events;
+    const cosmos = (this.cosmos = await loadCosmos());
+    if (!this.data) {
+      const accounts = this.legacy ? cosmos.data.accounts : cosmos.members[this.spec.id];
+      const nursery = this.legacy ? cosmos.data.nursery : this.spec.id === 'rising' ? cosmos.rising : [];
+      this.data = { ...cosmos.data, accounts, nursery };
+      this.byLogin = new Map(accounts.map((a, i) => [a.l.toLowerCase(), i]));
+      this.knots = this.spec.shape === 'irregular' ? knotsOf(this.spec, RG) : null;
+      this.worldPos = this.legacy ? placeWorlds(accounts) : placeMembers(accounts, this.spec, RG, (a) => this.yearOf(a));
+    }
+    this.news = cosmos.news;
     return this.data;
+  }
+
+  yearOf(a) {
+    return a.born ?? this.yearOfId(a.i);
   }
 
   account(login) {
@@ -158,13 +172,7 @@ export class GalaxyView {
 
   // Account creation year from its ID, interpolated between real anchors (galaxy.json ages).
   yearOfId(id) {
-    const ages = this.data.ages ?? [[1, 1192857859], [225000000, 1754483107]];
-    let k = 1;
-    while (k < ages.length - 1 && ages[k][0] < id) k++;
-    const [i0, t0] = ages[k - 1];
-    const [i1, t1] = ages[k];
-    const t = t0 + ((id - i0) / (i1 - i0)) * (t1 - t0);
-    return Math.min(2026.8, 1970 + t / 31557600);
+    return yearOfId(this.data.ages, id);
   }
 
   // The galaxy as of a given year (the film); 3000 = today.
@@ -191,9 +199,10 @@ export class GalaxyView {
     controls.enabled = true;
     controls.minDistance = 60;
     controls.maxDistance = RG * 3.2;
+    controls.zoomToCursor = true; // dive into whichever part of the galaxy you point at
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.18;
-    const focus = route.sector && this.sectorCenters[route.sector];
+    const focus = this.legacy && route.sector && this.sectorCenters[route.sector];
     if (focus) {
       controls.target.copy(focus);
       camera.position.copy(focus).add(new THREE.Vector3(0, RG * 0.35, RG * 0.45));
@@ -202,9 +211,55 @@ export class GalaxyView {
       camera.position.set(RG * 0.35, RG * 1.5, RG * 1.95);
     }
     this.flying = null;
+    const from = route.fromStar ? this.byLogin.get(route.fromStar.toLowerCase()) : undefined;
+    if (from !== undefined) {
+      // we zoomed out of this star's system: start beside the star and pull back into its region
+      this.disk.updateMatrixWorld(true);
+      const at = this.worldPos[from].clone().applyMatrix4(this.disk.matrixWorld);
+      const outward = at.clone().setY(0).normalize();
+      const start = at.clone().addScaledVector(outward, 22).add(new THREE.Vector3(0, 9, 0));
+      camera.position.copy(start);
+      controls.target.copy(at);
+      controls.autoRotate = false;
+      this.flying = { t: 0, dur: 2.8, fromPos: start, toPos: at.clone().addScaledVector(outward, RG * 0.42).add(new THREE.Vector3(0, RG * 0.32, 0)), fromTarget: at, toTarget: at.clone(), then: null, fadeIn: 'dark' };
+    } else if (route.fromUniverse) {
+      // arriving from the cluster: the whole galaxy rushes in out of the distance
+      const home = camera.position.clone();
+      camera.position.multiplyScalar(3.4);
+      controls.autoRotate = false;
+      this.flying = { t: 0, dur: 2.6, fromPos: camera.position.clone(), toPos: home, fromTarget: new THREE.Vector3(), toTarget: new THREE.Vector3(), then: null, fadeIn: 'dark' };
+    }
     ui.card(this.#cardHtml(route.sector));
     this.#wireCard();
-    ui.hint('Drag to rotate · scroll to zoom · click a star to visit its world');
+    ui.hint('Drag to rotate · zoom toward any star and keep going to enter its system · click a star to visit its world');
+  }
+
+  get ownsFade() {
+    return !!this.flying?.fadeIn;
+  }
+
+  zoomTarget(dir, event) {
+    if (this.flying) return null;
+    if (dir === 'out') {
+      if (this.ctx.controls.target.length() > 40) return { label: `The whole of ${this.spec.name.replace(/^The /, 'the ')}`, go: () => this.overview() };
+      return this.legacy ? null : { label: 'Out to the Commitverse: every galaxy', go: () => this.zoomOut() };
+    }
+    const { index, kind } = this.#pick(event, 90);
+    if (index < 0) return null;
+    const login = kind === 'world' ? this.data.accounts[index].l : this.data.nursery[index].r.split('/')[0];
+    return { label: `Into @${login}'s star system`, go: () => this.visit(login, 'system') };
+  }
+
+  // back out to the whole galaxy, centred on the singularity
+  overview() {
+    const { camera, controls } = this.ctx;
+    this.flying = { t: 0, dur: 2.4, fromPos: camera.position.clone(), toPos: new THREE.Vector3(RG * 0.35, RG * 1.5, RG * 1.95), fromTarget: controls.target.clone(), toTarget: new THREE.Vector3(), then: null };
+    controls.autoRotate = false;
+    if (!this.legacy) history.replaceState({ galaxy: this.spec.id }, '', `?galaxy=${this.spec.id}`);
+  }
+
+  zoomOut() {
+    this.ctx.leave(() => this.ctx.go({ fromGalaxy: this.spec.id }));
   }
 
   #build() {
@@ -219,6 +274,7 @@ export class GalaxyView {
 
   // The fastest-rising protostars flare up one after another: supernovae (tools/universe/events.mjs).
   #buildSupernovae() {
+    if (!this.data.nursery.length) return;
     const tex = radialTexture([
       [0, 'rgba(255,255,255,1)'],
       [0.12, 'rgba(255,220,240,0.9)'],
@@ -269,6 +325,7 @@ export class GalaxyView {
 
   // ~120k unnamed stars: bulge + 8 language arms + nebula haze for the named regions.
   #buildDust() {
+    if (!this.legacy) return this.#buildSpecDust();
     const rand = rng(0.4242);
     const n = 120000;
     const pos = new Float32Array(n * 3);
@@ -369,12 +426,14 @@ export class GalaxyView {
     const born = new Float32Array(n);
     const c = new THREE.Color();
     accounts.forEach((a, i) => {
-      born[i] = this.yearOfId(a.i);
+      born[i] = this.yearOf(a);
       const rand = rng(hashString(`${a.l}:look`));
       const p = this.worldPos[i];
       pos.set([p.x, p.y, p.z], i * 3);
-      const sector = SECTORS[a.sector];
-      c.set(a.sector === 'arm' ? langColor(a.lang) : sector.color).lerp(new THREE.Color('#ffffff'), 0.35);
+      const sector = SECTORS[a.sector] ?? SECTORS.arm;
+      if (this.legacy) c.set(a.sector === 'arm' ? langColor(a.lang) : sector.color);
+      else c.set(langColor(a.lang)).lerp(new THREE.Color(this.spec.color), this.spec.langs ? 0.15 : 0.45);
+      c.lerp(new THREE.Color('#ffffff'), 0.35);
       col.set([c.r * 1.25, c.g * 1.25, c.b * 1.25], i * 3);
       size[i] = 5 + Math.log10(1 + a.s) * 5;
       phase[i] = rand();
@@ -400,9 +459,11 @@ export class GalaxyView {
     this.protoPos = [];
     list.forEach((p, i) => {
       const rand = rng(hashString(p.r));
-      const x = Math.cos(reg.angle) * RG * reg.r + gauss(rand) * RG * reg.spread * 0.8;
-      const z = Math.sin(reg.angle) * RG * reg.r + gauss(rand) * RG * reg.spread * 0.8;
-      const y = gauss(rand) * 10;
+      // in the Rising Galaxy, protostars crowd its star-forming knots
+      const knot = this.knots?.[Math.floor(rand() * this.knots.length)];
+      const x = knot ? knot.x + gauss(rand) * knot.s * 0.7 : Math.cos(reg.angle) * RG * reg.r + gauss(rand) * RG * reg.spread * 0.8;
+      const z = knot ? knot.z + gauss(rand) * knot.s * 0.7 : Math.sin(reg.angle) * RG * reg.r + gauss(rand) * RG * reg.spread * 0.8;
+      const y = gauss(rand) * (knot ? knot.s * 0.25 : 10);
       pos.set([x, y, z], i * 3);
       this.protoPos.push(new THREE.Vector3(x, y, z));
       col.set([2.4, 1.2, 1.7], i * 3);
@@ -422,6 +483,7 @@ export class GalaxyView {
 
   // git: a black hole at the centre with a hot accretion disk.
   #buildSingularity() {
+    if (!this.legacy) return this.#buildCore();
     const group = new THREE.Group();
     const disk = new THREE.Mesh(
       new THREE.RingGeometry(14, 64, 256, 4),
@@ -474,6 +536,7 @@ export class GalaxyView {
   }
 
   #buildLabels() {
+    if (!this.legacy) return this.#buildBeacons();
     this.sectorCenters = {
       singularity: new THREE.Vector3(0, 0, 0),
       ancient: new THREE.Vector3(RG * 0.14, 0, -RG * 0.13),
@@ -510,6 +573,7 @@ export class GalaxyView {
   }
 
   #cardHtml(sectorKey) {
+    if (!this.legacy) return this.#specCardHtml();
     const accounts = this.data.accounts;
     const inSector = sectorKey && sectorKey !== 'singularity' ? accounts.filter((a) => a.sector === sectorKey) : accounts;
     const s = sectorKey ? SECTORS[sectorKey] : null;
@@ -536,9 +600,10 @@ export class GalaxyView {
       ${!sectorKey ? `<h4>Galactic news</h4><ul class="news">${this.#newsHtml()}</ul>` : ''}`;
   }
 
-  #newsHtml() {
-    const icon = { supernova: '✷', launch: '🚀', impact: '☄' };
-    const pick = [...this.news.filter((e) => e.type === 'supernova').slice(0, 3), ...this.news.filter((e) => e.type !== 'supernova').slice(0, 7)].sort((a, b) => b.t - a.t);
+  #newsHtml(keep = () => true) {
+    const icon = { supernova: '✷', launch: '🚀', impact: '☄', ignition: '✦', migration: '↗', joined: '⭐' };
+    const news = this.news.filter(keep);
+    const pick = [...news.filter((e) => e.type === 'ignition').slice(0, 3), ...news.filter((e) => e.type === 'supernova').slice(0, 3), ...news.filter((e) => e.type !== 'supernova' && e.type !== 'ignition').slice(0, 6)].sort((a, b) => b.t - a.t);
     return pick
       .map((e, k) => `<li data-news="${this.news.indexOf(e)}"><span class="ni">${icon[e.type]}</span><span><b>${e.title}</b><small>${e.detail} · ${new Date(e.t * 1000).toISOString().slice(0, 10)}</small></span></li>`)
       .join('');
@@ -548,6 +613,8 @@ export class GalaxyView {
     this.ctx.ui.cardEl.querySelectorAll('[data-login]').forEach((el) => {
       el.onclick = () => this.visit(el.dataset.login);
     });
+    const out = this.ctx.ui.cardEl.querySelector('#to-universe');
+    if (out) out.onclick = () => this.zoomOut();
     this.ctx.ui.cardEl.querySelectorAll('[data-news]').forEach((el) => {
       const e = this.news[Number(el.dataset.news)];
       el.onclick = () => {
@@ -558,20 +625,163 @@ export class GalaxyView {
   }
 
   // Fly into a star, then hand over to the planet view.
-  visit(login) {
+  visit(login, to = 'planet') {
     const { camera, controls } = this.ctx;
     const idx = this.data.accounts.findIndex((a) => a.l.toLowerCase() === login.toLowerCase());
     const at = idx >= 0 ? this.worldPos[idx].clone().applyMatrix4(this.disk.matrixWorld) : controls.target.clone();
     const dir = camera.position.clone().sub(at).normalize();
-    this.flying = { t: 0, dur: 1.6, fromPos: camera.position.clone(), toPos: at.clone().addScaledVector(dir, 6), fromTarget: controls.target.clone(), toTarget: at, then: () => this.ctx.go({ planet: login }) };
+    this.flying = { t: 0, dur: 1.6, fromPos: camera.position.clone(), toPos: at.clone().addScaledVector(dir, 6), fromTarget: controls.target.clone(), toTarget: at, then: () => this.ctx.go(to === 'system' ? { system: login } : { planet: login }) };
     controls.autoRotate = false;
   }
 
-  #pick(event) {
+  // Dust, haze and dark lanes in the galaxy's own shape and light (cosmos.js).
+  #buildSpecDust() {
+    const spec = this.spec;
+    const rand = rng(hashString(`${spec.id}:dust`));
+    const n = spec.shape === 'elliptical' ? 70000 : 90000;
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const size = new Float32Array(n);
+    const phase = new Float32Array(n);
+    const born = new Float32Array(n);
+    const c = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      const s = sampleDust(spec, rand, RG, this.knots);
+      pos.set([s.x, s.y, s.z], i * 3);
+      dustColor(spec, s.arm, s.f, rand, c).multiplyScalar(0.08 + rand() * 0.22 + (s.arm === -1 ? 0.12 : 0));
+      col.set([c.r, c.g, c.b], i * 3);
+      size[i] = 1.5 + rand() * 3.5;
+      phase[i] = rand();
+      born[i] = 2007.6 + Math.pow(Math.min(1, s.f), 1.15) * 18.6 + rand() * 0.4;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+    geo.setAttribute('aBorn', new THREE.BufferAttribute(born, 1));
+    this.dust = new THREE.Points(geo, starMaterial({ uTime: this.uniforms.uTime, uScale: this.uniforms.uScale, uHover: { value: -1 }, uYear: this.year }));
+    this.disk.add(this.dust);
+
+    const tex = radialTexture([
+      [0, 'rgba(255,255,255,0.55)'],
+      [0.4, 'rgba(255,255,255,0.16)'],
+      [1, 'rgba(255,255,255,0)'],
+    ]);
+    const haze = new THREE.Group();
+    this.puffs = [];
+    const addPuff = (x, y, z, s, color, opacity, at = 2007.6 + Math.pow(Math.min(1, Math.hypot(x, z) / RG), 1.15) * 18.6) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
+      sp.position.set(x, y, z);
+      sp.scale.setScalar(s);
+      haze.add(sp);
+      this.puffs.push({ sp, opacity, born: at, ignite: null });
+    };
+    for (let i = 0; i < 520; i++) {
+      const s = sampleDust(spec, rand, RG, this.knots);
+      if (s.arm === -1 && rand() < 0.7) continue;
+      addPuff(s.x, s.y, s.z, 60 + rand() * 150, dustColor(spec, s.arm, s.f, rand, new THREE.Color()).lerp(new THREE.Color('#9fb3ff'), 0.4), 0.018 + rand() * 0.026);
+    }
+    addPuff(0, 0, 0, RG * (spec.shape === 'elliptical' ? 0.85 : 0.5), new THREE.Color(spec.color).lerp(new THREE.Color('#ffc07a'), 0.5), spec.shape === 'elliptical' ? 0.32 : 0.26, 2007.5);
+    for (const k of this.knots ?? []) {
+      for (let i = 0; i < 22; i++) addPuff(k.x + gauss(rand) * k.s, gauss(rand) * 8, k.z + gauss(rand) * k.s, 70 + rand() * 160, new THREE.Color(rand() < 0.7 ? '#ff6f9f' : '#7fb8ff'), 0.05 + rand() * 0.05);
+    }
+    this.disk.add(haze);
+    if (spec.shape === 'spiral' || spec.shape === 'barred') {
+      // dark dust lanes along the inner edge of each arm, for contrast
+      const dark = new THREE.Group();
+      const arms = spec.arms ?? 4;
+      for (let i = 0; i < 420; i++) {
+        const arm = i % arms;
+        const r = RG * (0.12 + Math.pow(rand(), 0.8) * 0.8);
+        const a = armAngleOf(arm, r, RG, arms, spec.pitch) - 0.16 + gauss(rand) * 0.05;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x000000, transparent: true, opacity: 0.18 + rand() * 0.2, depthWrite: false }));
+        sp.position.set(Math.cos(a) * r, 2, Math.sin(a) * r);
+        sp.scale.setScalar(40 + rand() * 90);
+        dark.add(sp);
+      }
+      this.disk.add(dark);
+    }
+  }
+
+  // The bright heart of a galaxy (git itself sits at the centre of the whole cluster).
+  #buildCore() {
+    const glow = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: radialTexture([
+          [0, 'rgba(255,255,255,1)'],
+          [0.14, 'rgba(255,244,226,0.65)'],
+          [0.45, 'rgba(255,214,170,0.12)'],
+          [1, 'rgba(255,190,130,0)'],
+        ]),
+        color: new THREE.Color(this.spec.color).lerp(new THREE.Color('#fff1d6'), 0.6).multiplyScalar(1.5),
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    glow.scale.setScalar(this.spec.shape === 'elliptical' ? 340 : 230);
+    this.singularity = new THREE.Group();
+    this.singularity.add(glow);
+    this.disk.add(this.singularity);
+  }
+
+  // Beacons on the brightest worlds, and a name on each arm of a galaxy of several languages.
+  #buildBeacons() {
+    this.sectorCenters = {};
+    this.labels = [];
+    const add = (html, at, className, onclick, color) => {
+      const el = document.createElement('button');
+      el.className = className;
+      if (color) el.style.setProperty('--c', color);
+      el.innerHTML = html;
+      el.onclick = onclick;
+      const label = new CSS2DObject(el);
+      label.position.copy(at);
+      this.disk.add(label);
+      this.labels.push(label);
+    };
+    this.data.accounts.slice(0, 7).forEach((a, i) => add(`@${a.l}<small>${fmt(a.s)} ★</small>`, this.worldPos[i].clone().add(new THREE.Vector3(0, 16, 0)), 'world-label beacon', () => this.visit(a.l)));
+    const langs = this.spec.langs ?? [];
+    const arms = this.spec.arms ?? 4;
+    if (langs.length > 1) {
+      for (let k = 0; k < Math.min(arms, langs.length); k++) {
+        const r = RG * 0.7;
+        const a = armAngleOf(k, r, RG, arms, this.spec.pitch);
+        add(`${langs[k]}`, new THREE.Vector3(Math.cos(a) * r, 30, Math.sin(a) * r), 'sector-label', null, langColor(langs[k]));
+      }
+    }
+  }
+
+  #specCardHtml() {
+    const s = this.spec;
+    const acc = this.data.accounts;
+    const li = (a) => `<li data-login="${a.l}"><span class="dot" style="background:${langColor(a.lang)}"></span><span class="cname">@${a.l}</span><span class="tier">${levelOf(a.s).name}</span><span class="stars">${fmt(a.s)} ★</span></li>`;
+    const proto = (p) => `<li data-login="${p.r.split('/')[0]}"><span class="dot" style="background:#ff6f9f"></span><span class="cname">${p.r}</span><span class="stars">${fmt(p.s)} ★</span></li>`;
+    const logins = new Set([...acc.map((a) => a.l.toLowerCase()), ...this.data.nursery.map((p) => p.r.split('/')[0].toLowerCase())]);
+    const mine = (e) => logins.has(String(e.target?.planet ?? e.target?.from ?? e.repo?.split('/')[0] ?? '').toLowerCase());
+    const news = this.#newsHtml(mine);
+    const total = acc.reduce((n, a) => n + a.s, 0) + this.data.nursery.reduce((n, p) => n + p.s, 0);
+    const promoted = s.id === 'titan' ? this.cosmos.promoted : [];
+    return `
+      <div class="world-name" style="color:${s.color}">${s.name}</div>
+      <p class="level-text">${s.text}</p>
+      <div class="stats">
+        <div><b>${fmt(s.id === 'rising' ? this.data.nursery.length : acc.length)}</b><span>${s.id === 'rising' ? 'protostars' : 'worlds'}</span></div>
+        ${s.id === 'rising' ? `<div><b>${new Set(this.data.nursery.map((p) => p.lang)).size}</b><span>languages</span></div>` : `<div><b>${fmt(acc.filter((a) => a.t === 'O').length)}</b><span>organisations</span></div>`}
+        <div><b>${total >= 1e6 ? `${(total / 1e6).toFixed(1)}M` : fmt(total)}</b><span>stars</span></div>
+      </div>
+      ${promoted.length ? `<h4>Ignited this year <small>arrived from the Rising Galaxy</small></h4><ul class="cities">${promoted.map((a) => `<li data-login="${a.l}"><span class="dot" style="background:#ff6f9f"></span><span class="cname">${a.promoted.repo}</span><span class="stars">${fmt(a.promoted.stars)} ★</span></li>`).join('')}</ul>` : ''}
+      ${s.id === 'rising' ? `<h4>Climbing fastest</h4><ul class="cities">${this.data.nursery.slice(0, 12).map(proto).join('')}</ul><p class="note">At ${fmt(100000)} ★ a protostar ignites and migrates to the Titan Galaxy.</p>` : ''}
+      ${acc.length ? `<h4>Brightest worlds</h4><ul class="cities">${acc.slice(0, 14).map(li).join('')}</ul>` : ''}
+      ${news ? `<h4>News from this galaxy</h4><ul class="news">${news}</ul>` : ''}
+      <p><button id="to-universe" class="chip world">↥ Out to the Commitverse</button></p>`;
+  }
+
+  #pick(event, radius = 14) {
     const cam = this.ctx.camera;
     const v = new THREE.Vector3();
     let best = -1;
-    let bestD = 14;
+    let bestD = radius;
     let kind = null;
     const test = (list, k) => {
       list.forEach((p, i) => {
@@ -604,7 +814,7 @@ export class GalaxyView {
     if (kind === 'world') {
       const a = this.data.accounts[index];
       const lv = levelOf(a.s);
-      tip.innerHTML = `<b>@${a.l}</b> · ${SECTORS[a.sector].name}<br>${fmt(a.s)} ★ · Level ${lv.level} ${lv.name}<br><span class="desc">${a.lang} · ${a.top.join(', ')}</span><br><em>Click to visit this world</em>`;
+      tip.innerHTML = `<b>@${a.l}</b> · ${this.legacy ? (SECTORS[a.sector] ?? SECTORS.arm).name : this.spec.name}${a.promoted ? ' · ignited this year' : ''}<br>${fmt(a.s)} ★ · Level ${lv.level} ${lv.name}<br><span class="desc">${a.lang} · ${a.top.join(', ')}</span><br><em>Click to visit this world</em>`;
     } else {
       const p = this.data.nursery[index];
       tip.innerHTML = `<b>${p.r}</b> · protostar<br>${fmt(p.s)} ★ · born ${new Date(p.c * 1000).toISOString().slice(0, 10)}<br><span class="desc">${p.lang}</span><br><em>Click to visit its world</em>`;
@@ -639,7 +849,9 @@ export class GalaxyView {
       controls.target.lerpVectors(f.fromTarget, f.toTarget, e);
       camera.lookAt(controls.target);
       if (f.then) ui.fade(Math.max(0, (f.t - 0.7) / 0.3));
+      else if (f.fadeIn) ui.fade(Math.max(0, 1 - (f.t * f.dur) / 0.35), f.fadeIn);
       if (f.t >= 1) {
+        if (!f.then) controls.autoRotate = true;
         const then = f.then;
         this.flying = null;
         then?.();

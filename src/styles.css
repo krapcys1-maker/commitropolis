@@ -74,6 +74,9 @@ button:hover { background: rgba(255, 255, 255, 0.1); }
 #results .kind { color: var(--muted); font-size: 12px; margin-right: 6px; }
 
 #play { width: 40px; flex: none; }
+#survey-btn { flex: none; white-space: nowrap; }
+.bar.bottom:has(#timeline[hidden]) #commit { width: auto; flex: 1; }
+#loading a { color: var(--accent); }
 #timeline { flex: 1; min-width: 0; accent-color: var(--accent); }
 #commit { width: 34%; min-width: 0; }
 #commit-date { font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -238,6 +241,7 @@ button.primary {
   z-index: 20;
 }
 #arrival.on { opacity: 1; }
+html.arriving #arrival { opacity: 1; }
 #arrival.on.clear { opacity: 0; transition: opacity 2.2s ease; }
 
 #caption {

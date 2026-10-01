@@ -9,9 +9,13 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { FinishShader } from '../materials.js';
 import { PlanetView } from './planetView.js';
 import { GalaxyView } from './galaxyView.js';
+import { UniverseView } from './universeView.js';
 import { SystemView } from './systemView.js';
 import { OrgView } from './orgView.js';
-import { LEVELS, SECTORS, PROLOGUE } from './lore.js';
+import { LEVELS, PROLOGUE } from './lore.js';
+import { GALAXY, GALAXIES, accountOf, galaxyIdOf } from './cosmos.js';
+import { ScaleHud, watchZoom } from '../scale.js';
+import { catalogOf } from './systemView.js';
 import './ui.css';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +36,15 @@ const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(W(), H());
 labelRenderer.domElement.className = 'label-layer';
 $('app').appendChild(labelRenderer.domElement);
+// labels sit above the canvas: let the wheel over them still zoom (and change scale)
+labelRenderer.domElement.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    renderer.domElement.dispatchEvent(new WheelEvent('wheel', e));
+  },
+  { passive: false }
+);
 
 const camera = new THREE.PerspectiveCamera(45, W() / H(), 0.5, 20000);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -82,8 +95,11 @@ const ui = {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => (el.hidden = true), 5200);
   },
-  fade(amount) {
-    $('fade').style.opacity = amount;
+  // a white-out (clouds, the light of a star) or, between scales, a dip to black
+  fade(amount, tone = 'light') {
+    const el = $('fade');
+    el.style.opacity = amount;
+    el.classList.toggle('dark', tone === 'dark');
   },
   loading(text) {
     $('loading').hidden = !text;
@@ -113,11 +129,82 @@ const ui = {
   },
 };
 
-const ctx = { renderer, camera, controls, ui, composer };
-const views = { galaxy: new GalaxyView(ctx), planet: new PlanetView(ctx) };
-views.system = new SystemView(ctx, views.galaxy);
-views.org = new OrgView(ctx, views.galaxy);
+const scale = new ScaleHud();
+const ctx = { renderer, camera, controls, ui, composer, scale, time: 0 };
+const views = { universe: new UniverseView(ctx), planet: new PlanetView(ctx) };
+// one view per galaxy, built on first visit; 'all' is every world in one galaxy, as in the film
+const galaxyViews = {};
+const galaxyView = (id) => (galaxyViews[id] ??= new GalaxyView(ctx, GALAXY[id] ?? GALAXY.all));
+views.galaxy = galaxyView('all');
+ctx.galaxyFor = async (login, lang, stars) => {
+  const g = galaxyView(await galaxyIdOf(login, lang, stars));
+  await g.load();
+  return g;
+};
+views.system = new SystemView(ctx);
+views.org = new OrgView(ctx);
 let current = null;
+// links from before the galaxies split up: the old sectors of the one galaxy
+const SECTOR_GALAXY = { titan: 'titan', ai: 'ai', nursery: 'rising', silent: 'archive' };
+const isOrg = async (login) =>
+  (await accountOf(login))?.t === 'O' || (await fetch(`universe/orgs/${login.toLowerCase()}.json`).then((r) => (r.headers.get('content-type') ?? '').includes('json')).catch(() => false));
+
+// Leaving a scale: keep pulling back while the view dips to black, then hand over to the next one.
+let leaving = null;
+function leave(then) {
+  if (leaving) return;
+  scale.reset();
+  controls.autoRotate = false;
+  leaving = { t: 0, then, offset: camera.position.clone().sub(controls.target) };
+}
+ctx.leave = leave;
+function updateLeaving(dt) {
+  leaving.t += dt;
+  const k = Math.min(1, leaving.t / 0.4);
+  camera.position.copy(controls.target).addScaledVector(leaving.offset, 1 + 0.6 * k * k);
+  camera.lookAt(controls.target);
+  ui.fade(k, 'dark');
+  if (k < 1) return;
+  const { then } = leaving;
+  leaving = null;
+  then();
+}
+
+// The rungs of the scale ladder for the view on screen (src/scale.js).
+function ladder() {
+  const v = current;
+  const universe = (gid) => ({ label: 'Commitverse', go: () => leave(() => go({ fromGalaxy: gid })) });
+  if (v === views.universe) {
+    scale.set('universe', { universe: { label: `${GALAXIES.length} galaxies` }, galaxy: { label: 'zoom into a galaxy' } });
+  } else if (v instanceof GalaxyView) {
+    scale.set('galaxy', { universe: v.legacy ? null : universe(v.spec.id), galaxy: { label: v.spec.name }, system: { label: 'zoom into any star' } });
+  } else if (v === views.system) {
+    const login = v.home.l;
+    scale.set('system', {
+      universe: universe(v.galaxyId),
+      galaxy: { label: GALAXY[v.galaxyId].name, go: () => v.zoomOut() },
+      system: { label: `System ${v.catalog}` },
+      world: { label: `@${login}`, go: () => v.visit(login) },
+    });
+  } else if (v === views.org) {
+    scale.set('system', {
+      universe: universe(v.galaxyId),
+      galaxy: { label: GALAXY[v.galaxyId].name, go: () => v.zoomOut() },
+      system: { label: `★ @${v.data.login}` },
+      city: { label: `${v.structures[0]?.repo.n ?? 'its structures'}…`, go: () => v.land(0) },
+    });
+  } else if (v === views.planet) {
+    const login = v.data.login;
+    const gid = v.galaxyId ?? 'scripting';
+    scale.set('world', {
+      universe: universe(gid),
+      galaxy: { label: GALAXY[gid].name, go: () => leave(() => go({ galaxy: gid, fromStar: login })) },
+      system: { label: `System ${catalogOf(login)}`, go: () => v.zoomOut() },
+      world: { label: `@${login}` },
+      city: { label: 'zoom into a city' },
+    });
+  }
+}
 
 // CSS2D labels live in one shared layer: hide the old scene's when another scene takes the screen
 // (the renderer only updates labels of the scene it draws, so they'd stay frozen in place).
@@ -129,50 +216,59 @@ function show(scene) {
 }
 
 async function go(route, { push = true } = {}) {
-  ui.loading(route.planet ? `Approaching @${route.planet}…` : route.system ? 'Entering the system…' : 'Charting the galaxy…');
+  if (route.sector && !route.galaxy) route = SECTOR_GALAXY[route.sector] ? { galaxy: SECTOR_GALAXY[route.sector] } : {};
+  ui.loading(route.planet ? `Approaching @${route.planet}…` : route.system ? 'Entering the system…' : route.galaxy ? 'Charting the galaxy…' : 'Charting the Commitverse…');
   ui.card('');
   $('tooltip').hidden = true;
   try {
     if (route.planet || route.system) {
-      await views.galaxy.load();
       const login = route.planet ?? route.system;
-      if (views.galaxy.account(login)?.t === 'O') route = { system: login };
+      if ((await accountOf(login))?.t === 'O') route = { system: login, fromCity: route.ascend ?? route.fromCity };
     }
     if (route.planet) {
-      const planet = await views.planet.enter(route.planet);
-      if (planet.redirect === 'org') return go({ system: planet.login }, { push });
+      const planet = await views.planet.enter(route.planet, { ascend: route.ascend });
+      if (planet.redirect === 'org') return go({ system: planet.login, fromCity: route.ascend }, { push });
       current = views.planet;
-      const sector = views.galaxy.sectorOf(route.planet);
-      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: SECTORS[sector]?.name ?? 'The Language Arms', href: `./?sector=${sector}` }, { label: 'System', href: `./?system=${encodeURIComponent(planet.data.login)}` }, { label: `@${planet.data.login}` }]);
+      const galaxy = GALAXY[(views.planet.galaxyId = await galaxyIdOf(planet.data.login, planet.mainLanguage, planet.stars))];
+      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: galaxy.name, href: `./?galaxy=${galaxy.id}` }, { label: 'System', href: `./?system=${encodeURIComponent(planet.data.login)}` }, { label: `@${planet.data.login}` }]);
       document.title = `@${planet.data.login} · Commitverse`;
-    } else if (route.system && (views.galaxy.account(route.system)?.t === 'O' || (await fetch(`universe/orgs/${route.system.toLowerCase()}.json`).then((r) => (r.headers.get('content-type') ?? '').includes('json')).catch(() => false)))) {
-      const org = await views.org.enter(route.system);
+    } else if (route.system && (await isOrg(route.system))) {
+      const org = await views.org.enter(route.system, { fromCity: route.fromCity });
       current = views.org;
-      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: org.sector.name, href: `./?sector=${views.galaxy.sectorOf(route.system)}` }, { label: `★ @${views.org.data.login}` }]);
+      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: org.galaxy.name, href: `./?galaxy=${org.galaxy.id}` }, { label: `★ @${views.org.data.login}` }]);
       document.title = `★ @${views.org.data.login} · Commitverse`;
     } else if (route.system) {
       const home = views.planet.data?.login?.toLowerCase() === route.system.toLowerCase() ? views.planet : null;
       const fallback = home ? { l: home.data.login, s: home.planet?.stars ?? 0, lang: home.planet?.mainLanguage ?? 'Other', sector: 'arm', top: [] } : { l: route.system, s: 0, lang: 'Other', sector: 'arm', top: [] };
-      await views.galaxy.load();
-      const sys = await views.system.enter(route.system, fallback);
+      const sys = await views.system.enter(route.system, fallback, { fromWorld: route.fromWorld });
       current = views.system;
-      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: sys.sector.name, href: `./?sector=${sys.home.sector}` }, { label: `System ${sys.catalog}` }]);
+      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: sys.galaxy.name, href: `./?galaxy=${sys.galaxy.id}` }, { label: `System ${sys.catalog}` }]);
       document.title = `System ${sys.catalog} · Commitverse`;
+    } else if (route.galaxy) {
+      const g = galaxyView(route.galaxy);
+      await g.enter(route);
+      current = g;
+      ui.crumbs([{ label: 'Commitverse', href: './' }, { label: g.spec.name }]);
+      document.title = `${g.spec.name} · Commitverse`;
     } else {
-      await views.galaxy.enter(route);
-      current = views.galaxy;
+      await views.universe.enter(route);
+      current = views.universe;
       ui.crumbs([{ label: 'Commitverse' }]);
       document.title = 'Commitverse';
     }
     show(current.scene);
-    const url = route.planet ? `?planet=${encodeURIComponent(route.planet)}` : route.system ? `?system=${encodeURIComponent(route.system)}` : route.sector ? `?sector=${route.sector}` : './';
-    if (push) history.pushState(route, '', url);
+    ladder();
+    // only where we are goes into history, not how we got here
+    const state = route.planet ? { planet: route.planet } : route.system ? { system: route.system } : route.galaxy ? { galaxy: route.galaxy } : {};
+    const url = route.planet ? `?planet=${encodeURIComponent(route.planet)}` : route.system ? `?system=${encodeURIComponent(route.system)}` : route.galaxy ? `?galaxy=${route.galaxy}` : './';
+    if (push) history.pushState(state, '', url);
+    else if (route.ascend) history.replaceState(state, '', url);
   } catch (err) {
     ui.toast(err.message);
     if (!current) await go({}, { push: false });
   } finally {
     ui.loading('');
-    ui.fade(0);
+    if (!current?.ownsFade) ui.fade(0);
   }
 }
 addEventListener('popstate', (e) => go(e.state ?? {}, { push: false }));
@@ -196,11 +292,25 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 });
 controls.addEventListener('start', () => (controls.autoRotate = false));
 
+// Zooming past the limit of a scale carries you to the next one (src/scale.js).
+const busy = () => !!(leaving || current?.flying || current?.landing || current?.ascending || !$('codex').hidden);
+watchZoom(
+  renderer.domElement,
+  controls,
+  camera,
+  (dir, amount, e) => {
+    const target = current?.zoomTarget?.(dir, e, rayFrom(e));
+    if (target && scale.press(dir, amount, target.label)) target.go();
+  },
+  { enabled: () => !busy() }
+);
+
 $('search').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
-  const login = e.target.value.trim().replace(/^@/, '').replace(/^https?:\/\/github\.com\//, '').split('/')[0];
-  if (login) go({ planet: login });
+  const [login, repo] = e.target.value.trim().replace(/^@/, '').replace(/^https?:\/\/github\.com\//, '').split(/[/\s]+/);
   e.target.blur();
+  if (login && repo) location.href = `city.html?repo=${encodeURIComponent(`${login}/${repo}`)}&from=${encodeURIComponent(login)}&arrive=1`;
+  else if (login) go({ planet: login });
 });
 
 // ---------------------------------------------------------------- codex & prologue
@@ -213,14 +323,22 @@ function openCodex() {
     <h3>Levels of civilisation</h3>
     <p>Stars are energy. A world develops with the total stars across its repositories.</p>
     <table>${LEVELS.map((l) => `<tr><td>${l.level}</td><td><b>${l.name}</b></td><td>${l.min.toLocaleString('en-US')}+ ★</td><td>${l.text}</td></tr>`).join('')}</table>
-    <h3>Sectors of the galaxy</h3>
-    <dl>${Object.values(SECTORS).map((s) => `<dt style="color:${s.color}">${s.name}</dt><dd>${s.text}</dd>`).join('')}</dl>
+    <h3>The galaxies</h3>
+    <p>Every world belongs to one galaxy. The giants come first, then AI, then the silent, then the family of the world's main language.</p>
+    <dl>${GALAXIES.map((g) => `<dt style="color:${g.color}">${g.name}</dt><dd>${g.text}</dd>`).join('')}</dl>
+    <h3>Migrations</h3>
+    <p>The universe is reseeded from GitHub every day. A protostar that passes 100,000 ★ <b>ignites</b> and crosses to the Titans as a comet; worlds whose numbers change migrate too. Star the project's repository and your own world joins at the next update.</p>
+    <h3>Travelling</h3>
+    <ul>
+      <li><b>One zoom from the cluster to a line of code</b>: universe → galaxy → star system → world → city → building. Zoom past the limit of a scale and keep going to reach the next one.</li>
+      <li>Search <b>@anyone</b> to fly to their world, or <b>owner/repo</b> to land in any city.</li>
+    </ul>
     <h3>Reading a world</h3>
     <ul>
       <li><b>A planet is a person</b>; each of their repositories is a city on its continents.</li>
       <li><b>City lights at night</b> glow where work happened recently.</li>
       <li><b>Atmosphere colour</b> is the world's main language.</li>
-      <li>Land in a city to walk its history: files are buildings, folders are districts, and a building's floors are its lines of code.</li>
+      <li>Land in a city to walk its history: files are buildings, folders are districts, and a building's floors are its lines of code. A city whose history hasn't been surveyed yet is raised live from GitHub: its lit windows are the files the last 100 commits touched.</li>
     </ul>
     <p class="credit">Night sky: NASA/Goddard Space Flight Center Scientific Visualization Studio, Deep Star Maps 2020. Gaia DR2: ESA/Gaia/DPAC.</p>`;
   $('codex').hidden = false;
@@ -229,7 +347,8 @@ function openCodex() {
 $('codex-btn').onclick = openCodex;
 
 async function prologue() {
-  if (params.has('planet') || params.has('skip') || sessionStorage.getItem('prologue')) return;
+  // the prologue opens the universe; a link to a particular place goes straight there
+  if (['planet', 'system', 'galaxy', 'sector', 'skip'].some((k) => params.has(k)) || sessionStorage.getItem('prologue')) return;
   try {
     sessionStorage.setItem('prologue', '1');
   } catch {}
@@ -254,9 +373,11 @@ let last = performance.now();
 let time = 0;
 function stepFrame(dt) {
   time += dt;
+  ctx.time = time;
   finish.uniforms.uTime.value = time;
   current?.update(dt, time);
-  if (!current?.landing && !current?.flying) controls.update();
+  if (leaving) updateLeaving(dt);
+  else if (!current?.landing && !current?.flying && !current?.ascending) controls.update();
   composer.render();
   labelRenderer.render(current?.scene ?? renderPass.scene, camera);
 }
@@ -283,7 +404,10 @@ if (params.has('director')) {
   await window.director.prepare();
 } else {
 const intro = prologue();
-await go(params.get('planet') ? { planet: params.get('planet') } : params.get('system') ? { system: params.get('system') } : { sector: params.get('sector') }, { push: false });
+await go(
+  params.get('planet') ? { planet: params.get('planet'), ascend: params.get('ascend') } : params.get('system') ? { system: params.get('system') } : params.get('galaxy') ? { galaxy: params.get('galaxy') } : { sector: params.get('sector') },
+  { push: false }
+);
 if (!params.has('capture')) frame();
 await intro;
 }

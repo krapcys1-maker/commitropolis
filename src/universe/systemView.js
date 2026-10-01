@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Sky, radialTexture } from './sky.js';
 import { NOISE } from './glsl.js';
-import { SECTORS, levelOf, langColor, worldStyle, hashString } from './lore.js';
+import { levelOf, langColor, worldStyle, hashString } from './lore.js';
+import { GALAXY } from './cosmos.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const ORBITS = [140, 200, 265, 335, 410, 490, 575, 665];
+export const catalogOf = (login) => `CV-${String(Math.floor(hashString(login) * 99991)).padStart(5, '0')}`;
 
 // A small world as seen from across its star system: noise continents in its language style,
 // lit by the star, with a thin atmosphere rim and night lights for developed worlds.
@@ -69,15 +71,18 @@ export class SystemView {
     this.flying = null;
   }
 
-  async enter(login, fallback) {
+  // fromWorld: we zoomed out of the home world, so start next to it and pull back
+  async enter(login, fallback, { fromWorld = false } = {}) {
     const { camera, controls, ui } = this.ctx;
-    await this.galaxy.load();
-    const members = this.galaxy.neighboursOf(login, 7, fallback);
+    // the system is a neighbourhood of the galaxy this world belongs to (cosmos.js)
+    const galaxy = await this.ctx.galaxyFor(login, fallback?.lang, fallback?.s);
+    const members = galaxy.neighboursOf(login, 7, fallback);
     const home = members[0];
-    const sector = SECTORS[home.sector] ?? SECTORS.arm;
+    const sector = galaxy.spec;
+    this.galaxyId = sector.id;
     this.members = members;
     this.home = home;
-    this.catalog = `CV-${String(Math.floor(hashString(home.l) * 99991)).padStart(5, '0')}`;
+    this.catalog = catalogOf(home.l);
 
     if (this.group) {
       this.scene.remove(this.group);
@@ -140,16 +145,61 @@ export class SystemView {
     controls.enabled = true;
     controls.minDistance = 60;
     controls.maxDistance = 2200;
+    controls.zoomToCursor = false;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.2;
     controls.target.set(0, 0, 0);
     camera.position.set(0, 520, 900);
+    this.flying = null;
+    if (fromWorld) {
+      // the home world as big as it was a moment ago from orbit, the star off to one side
+      const w = this.worlds[0];
+      const a = w.phase + (this.ctx.time ?? 0) * w.speed;
+      const at = new THREE.Vector3(Math.cos(a) * w.radius, 0, Math.sin(a) * w.radius);
+      const radial = at.clone().normalize();
+      const side = new THREE.Vector3(0, 1, 0).cross(radial).normalize();
+      camera.position.copy(at).addScaledVector(side.multiplyScalar(0.85).addScaledVector(radial, 0.25).add(new THREE.Vector3(0, 0.35, 0)).normalize(), w.size * 9);
+      controls.target.copy(at);
+      controls.autoRotate = false;
+      this.flying = { t: 0, dur: 2.6, fromPos: camera.position.clone(), toPos: new THREE.Vector3(0, 520, 900), fromTarget: at, toTarget: new THREE.Vector3(), fadeIn: 'dark' };
+    }
 
     ui.card(this.#cardHtml(sector));
     ui.cardEl.querySelectorAll('[data-login]').forEach((el) => (el.onclick = () => this.visit(el.dataset.login)));
-    ui.cardEl.querySelector('#to-galaxy').onclick = () => this.ctx.go({ sector: home.sector });
-    ui.hint('A star system of neighbouring worlds · click a world to visit · scroll out to reach the galaxy');
-    return { home, sector, catalog: this.catalog };
+    ui.cardEl.querySelector('#to-galaxy').onclick = () => this.zoomOut();
+    ui.hint('A star system of neighbouring worlds · click or zoom into a world to visit it · keep zooming out for the galaxy');
+    return { home, galaxy: sector, catalog: this.catalog };
+  }
+
+  get ownsFade() {
+    return !!this.flying;
+  }
+
+  zoomTarget(dir, event) {
+    if (this.flying) return null;
+    if (dir === 'out') return { label: `Out to ${GALAXY[this.galaxyId].name}`, go: () => this.zoomOut() };
+    const w = this.#worldNear(event) ?? this.worlds[0];
+    return { label: `Fly to @${w.account.l}`, go: () => this.visit(w.account.l) };
+  }
+
+  zoomOut() {
+    this.ctx.leave(() => this.ctx.go({ galaxy: this.galaxyId, fromStar: this.home.l }));
+  }
+
+  // the world nearest the pointer on screen, if it's close
+  #worldNear(event) {
+    let best = null;
+    let bestD = 140;
+    for (const w of this.worlds) {
+      const p = w.mesh.getWorldPosition(new THREE.Vector3()).project(this.ctx.camera);
+      if (p.z > 1) continue;
+      const d = Math.hypot((p.x * 0.5 + 0.5) * innerWidth - event.clientX, (-p.y * 0.5 + 0.5) * innerHeight - event.clientY);
+      if (d < bestD) {
+        bestD = d;
+        best = w;
+      }
+    }
+    return best;
   }
 
   #cardHtml(sector) {
@@ -193,8 +243,10 @@ export class SystemView {
       camera.position.lerpVectors(f.fromPos, f.toPos, e);
       controls.target.lerpVectors(f.fromTarget, f.toTarget, e);
       camera.lookAt(controls.target);
-      ui.fade(Math.max(0, (f.t - 0.75) / 0.25));
+      if (f.fadeIn) ui.fade(Math.max(0, 1 - (f.t * f.dur) / 0.35), f.fadeIn);
+      else ui.fade(Math.max(0, (f.t - 0.75) / 0.25));
       if (f.t >= 1) {
+        if (!f.then) controls.autoRotate = true;
         const then = f.then;
         this.flying = null;
         then?.();

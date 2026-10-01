@@ -198,7 +198,10 @@ ul.cities .stars { font: 12px var(--mono); color: var(--gold); }
 }
 #toast a { color: var(--accent); }
 
-#fade { position: fixed; inset: 0; background: #e9f2ff; opacity: 0; pointer-events: none; z-index: 8; transition: opacity 0.1s linear; }
+#fade { position: fixed; inset: 0; background: radial-gradient(ellipse at center, #f4f8ff, #dde8ff 60%, #c9d8f5); opacity: 0; pointer-events: none; z-index: 8; transition: opacity 0.1s linear; }
+#fade.dark { background: #02030a; }
+/* coming up out of a city: the page starts inside the clouds, before any script runs */
+html.ascending #fade { opacity: 1; }
 
 #loading {
   position: fixed;
@@ -334,3 +337,40 @@ ul.news small { color: var(--muted); font-size: 11.5px; }
   white-space: nowrap;
   transform: translate(10px, -10px);
 }
+
+/* the cluster of galaxies (universeView.js) */
+.galaxy-label {
+  pointer-events: auto;
+  cursor: pointer;
+  --c: #9fe3ff;
+  padding: 3px 9px 4px;
+  border-radius: 9px;
+  background: rgba(4, 6, 16, 0.45);
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  color: var(--c);
+  font: 700 11px var(--font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  text-shadow: 0 0 14px var(--c);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+.galaxy-label small { display: block; margin-top: 2px; font: 500 10.5px var(--mono); letter-spacing: 0.02em; text-transform: none; color: #dfe6ff; text-shadow: none; }
+.galaxy-label.on, .galaxy-label:hover { background: rgba(10, 14, 32, 0.8); box-shadow: 0 0 22px color-mix(in srgb, var(--c) 40%, transparent); }
+.comet-label {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: #ffd6ec;
+  font: 600 11px var(--mono);
+  text-align: left;
+  text-shadow: 0 0 12px rgba(255, 110, 180, 0.95), 0 1px 2px #000;
+  white-space: nowrap;
+}
+.comet-label small { display: block; font: 10px var(--mono); color: #ffcf87; }
+.git-label { color: #ffd9a8; text-shadow: 0 0 12px rgba(255, 170, 90, 0.9), 0 1px 2px #000; }
+.world-label.beacon { background: rgba(4, 6, 16, 0.3); border-color: rgba(255, 255, 255, 0.14); }
+.world-label.beacon small { color: var(--gold); font-family: var(--mono); }

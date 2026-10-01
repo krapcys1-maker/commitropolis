@@ -22,15 +22,22 @@ export function apiBase() {
   return configPromise;
 }
 
-// A city bundle: shipped with the site if prebaked, otherwise from the mapping service.
+// A city bundle, best first: prebaked with the site, mapped by the mapping service (both with the
+// whole history), or, for any other public repository ("owner/name"), a snapshot raised live from
+// the GitHub API.
 export async function fetchCity(slug) {
-  const local = await fetch(`data/${slug}.json`);
+  const name = slug.includes('/') ? slug.replace(/^https?:\/\/github\.com\//, '').split('/').slice(0, 2).join('/') : null;
+  const key = name ? name.replace('/', '-').toLowerCase() : slug;
+  const local = await fetch(`data/${key}.json`);
   if (local.ok && (local.headers.get('content-type') ?? '').includes('json')) return local.json();
   const api = await apiBase();
-  if (!api) throw new Error(`City ${slug} is not mapped`);
-  const remote = await fetch(`${api}/api/city/${slug}`);
-  if (!remote.ok) throw new Error(`City ${slug} is not mapped yet`);
-  return remote.json();
+  if (api) {
+    const remote = await fetch(`${api}/api/city/${key}`).catch(() => null);
+    if (remote?.ok) return remote.json();
+  }
+  if (!name) throw new Error(`City ${slug} is not mapped`);
+  const { liveCity } = await import('./liveCity.js');
+  return liveCity(name);
 }
 
 // Ask the mapping service to build a city, reporting progress steps until it is done.

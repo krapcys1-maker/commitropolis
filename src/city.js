@@ -44,8 +44,9 @@ export class City {
     this.heat = new Float32Array(n);
     this.baseHeat = new Float32Array(n);
     this.lastTouch = new Float64Array(n); // unix time of the last commit touching the file, so far
-    this.start = data.commits[0]?.t ?? 0;
-    this.end = data.commits.at(-1)?.t ?? 0;
+    // a live snapshot has no history: its clock is the last push (src/liveCity.js)
+    this.start = data.commits[0]?.t ?? data.snapshot?.start ?? 0;
+    this.end = data.commits.at(-1)?.t ?? data.snapshot?.now ?? 0;
     this.now = this.end;
     this.halfLife = Math.max(45 * 86400, (this.end - this.start) * 0.1);
     this.showRuins = true;

@@ -15,7 +15,7 @@ const month = (t) => new Date(t * 1000).toLocaleDateString('en-US', { month: 'sh
 const CODE = new Set(['c', 'cu', 'h', 'cc', 'cpp', 'hpp', 'py', 'js', 'mjs', 'ts', 'tsx', 'go', 'rs', 'java', 'zig', 'rb', 'cs', 'swift', 'kt']);
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap';
-const SITE = 'krapcys1-maker.github.io/commitropolis';
+const SITE = 'krapcys1-maker.github.io/commitverse';
 
 // timeline (seconds)
 const T = { play: 0.6, history: 11.5, orbitEnd: 13.6, fly: 13.6, enter: 15.6, scroll: [16.2, 22.0], dip: [21.6, 22.1], end: 22.1, card: [23.0, 27.7], out: [27.6, 28.6] };

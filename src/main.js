@@ -12,8 +12,10 @@ import { Atmosphere } from './atmosphere.js';
 import { FinishShader } from './materials.js';
 import { CodeReader } from './reader.js';
 import { search } from './search.js';
-import { fetchCity } from './config.js';
+import { fetchCity, apiBase, mapCity } from './config.js';
 import { CityEvents } from './cityEvents.js';
+import { ScaleHud, watchZoom } from './scale.js';
+import { GALAXY, galaxyIdOf } from './universe/cosmos.js';
 
 const $ = (id) => document.getElementById(id);
 const W = () => Math.max(1, innerWidth);
@@ -35,6 +37,15 @@ const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(W(), H());
 labelRenderer.domElement.className = 'label-layer';
 $('app').appendChild(labelRenderer.domElement);
+// labels sit above the canvas: let the wheel over them still zoom (and change scale)
+labelRenderer.domElement.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    renderer.domElement.dispatchEvent(new WheelEvent('wheel', e));
+  },
+  { passive: false }
+);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, W() / H(), 0.3, 8000);
@@ -85,6 +96,8 @@ let elevator = null; // camera ride along a building's facade while its code is 
 let events = null; // rockets and asteroid impacts in the timelapse
 let shake = null;
 let captionUntil = 0; // on the frame clock, so captions behave the same live and in a frame-by-frame capture
+let ascending = null; // rising out of the city, up through the clouds to its world
+const scale = new ScaleHud();
 
 function showCaption(text) {
   const el = $('caption');
@@ -116,10 +129,14 @@ async function loadIndex() {
     $('loading').textContent = 'No city data yet. Run: npm run ingest -- <github-url>';
     return;
   }
-  // a city mapped by the service isn't in the shipped index: list it anyway
-  if (!index.some((e) => e.slug === slug)) select.insertAdjacentHTML('afterbegin', `<option value="${slug}">${slug.replace('-', '/')}</option>`);
+  // a city mapped by the service or raised live isn't in the shipped index: list it anyway
+  if (!index.some((e) => e.slug === slug)) select.insertAdjacentHTML('afterbegin', `<option value="${slug}">${slug.includes('/') ? slug : slug.replace('-', '/')}</option>`);
   select.value = slug;
-  await load(slug, params.get('focus'));
+  try {
+    await load(slug, params.get('focus'));
+  } catch (err) {
+    $('loading').innerHTML = `${err.message}<br><a href="./">← Back to the Commitverse</a>`;
+  }
 }
 
 async function load(slug, focus) {
@@ -152,15 +169,50 @@ async function load(slug, focus) {
   camera.position.set(size * 0.66, size * 0.3, size * 0.8);
   controls.target.set(0, size * 0.02, 0);
   controls.maxDistance = size * 3;
+  controls.minDistance = 4;
+  wireOrbit();
+  cityLadder();
   controls.autoRotate = !focus && !captureMode;
 
   $('timeline').value = 1000;
   $('play').textContent = '▶';
   showCommit(data.commits.at(-1));
+  showSnapshot();
   $('loading').hidden = true;
   if (focus) flyTo(focus);
   else if (params.has('arrive')) arrive(size);
 }
+
+// A live snapshot (src/liveCity.js) has no history to replay: say so, and offer the full survey.
+function showSnapshot() {
+  const snap = data.snapshot;
+  $('play').hidden = $('timeline').hidden = !!snap;
+  $('survey-btn').hidden = !snap;
+  if (!snap) return;
+  const latest = snap.recent?.[0];
+  $('commit-date').textContent = `Snapshot · ${fmtDate(snap.now)}${snap.trimmed ? ' · largest files only' : ''}`;
+  $('commit-msg').textContent = latest ? `${latest.s} — ${latest.a}` : snap.description;
+  if (!params.has('director')) setTimeout(() => showCaption('Raised live from GitHub · lit windows: files the last 100 commits touched'), 900);
+}
+
+$('survey-btn').onclick = async () => {
+  const btn = $('survey-btn');
+  const api = await apiBase();
+  if (!api) {
+    showCaption(`Surveying history needs the mapping service · locally: npm run ingest -- ${data.repo.name}`);
+    return;
+  }
+  const steps = { queued: 'In the queue…', clone: 'Cloning…', scan: 'Measuring files…', history: 'Reading the history…', layout: 'Laying out…', write: 'Raising buildings…', done: 'Done' };
+  btn.disabled = true;
+  try {
+    const slug = await mapCity(data.repo.name, (job) => (btn.textContent = steps[job.step ?? job.status] ?? 'Surveying…'));
+    location.href = `city.html?repo=${encodeURIComponent(slug)}${params.get('from') ? `&from=${encodeURIComponent(params.get('from'))}` : ''}`;
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Survey its whole history';
+    showCaption(`Couldn't survey it: ${err.message}`);
+  }
+};
 
 // Coming down from orbit: start high in the sky and descend onto the city as the clouds clear.
 function arrive(size) {
@@ -178,13 +230,74 @@ function arrive(size) {
 
 if (params.has('arrive')) $('arrival').classList.add('on');
 
-// Back to the universe, if we came from a world.
-const fromWorld = params.get('from');
-if (fromWorld) {
+// Up to the universe: every city stands on its owner's world (an organisation is a star instead).
+const owner = () => data?.repo.name.split('/')[0] ?? params.get('from') ?? '';
+const repoName = () => data?.repo.name.split('/')[1] ?? '';
+const worldHref = () => `./?planet=${encodeURIComponent(owner())}&ascend=${encodeURIComponent(repoName())}`;
+
+function wireOrbit() {
   const back = $('orbit');
+  if (!owner()) return;
   back.hidden = false;
-  back.href = `./?planet=${encodeURIComponent(fromWorld)}`;
-  back.textContent = `↑ Orbit @${fromWorld}`;
+  back.href = worldHref();
+  back.textContent = `↑ @${owner()}`;
+  back.onclick = (e) => {
+    e.preventDefault();
+    ascend();
+  };
+}
+
+// The scale ladder: universe, galaxy, system and world above us, the building we stand in below
+// (src/scale.js). Which galaxy the owner's world is in comes from the charted universe (cosmos.js).
+let cityGalaxy = { owner: null, id: null };
+function cityLadder() {
+  if (!data || params.has('director')) return;
+  const o = owner();
+  if (cityGalaxy.owner !== o) {
+    cityGalaxy = { owner: o, id: null };
+    galaxyIdOf(o, data.snapshot?.language, data.snapshot?.stars)
+      .then((id) => {
+        if (cityGalaxy.owner !== o) return;
+        cityGalaxy.id = id;
+        cityLadder();
+      })
+      .catch(() => {});
+  }
+  const gid = cityGalaxy.id;
+  scale.set(elevator ? 'building' : 'city', {
+    universe: { label: 'Commitverse', href: './' },
+    galaxy: { label: gid ? GALAXY[gid].name : '…', href: gid ? `./?galaxy=${gid}` : './' },
+    system: { label: `@${o}'s star system`, href: `./?system=${encodeURIComponent(o)}` },
+    world: { label: `@${o}`, go: ascend },
+    city: { label: repoName(), go: elevator ? () => exitBuilding() : null },
+    building: elevator ? { label: data.files[elevator.i].p.split('/').pop() } : { label: 'zoom into a building' },
+  });
+}
+
+function ascend() {
+  if (ascending || !data || !owner()) return;
+  exitBuilding();
+  flight = null;
+  controls.enabled = false;
+  controls.autoRotate = false;
+  scale.reset();
+  const veil = $('arrival');
+  veil.classList.remove('clear');
+  veil.style.opacity = 0;
+  veil.classList.add('on');
+  ascending = { t: 0, from: camera.position.clone(), target: controls.target.clone() };
+}
+
+function updateAscend(dt) {
+  ascending.t += dt;
+  const k = Math.min(1, ascending.t / 1.1);
+  camera.position.copy(ascending.from).add(new THREE.Vector3(0, data.size * 1.8 * k * k, 0));
+  camera.lookAt(ascending.target);
+  $('arrival').style.opacity = Math.min(1, k * 1.3);
+  if (k >= 1 && !ascending.left) {
+    ascending.left = true;
+    location.href = worldHref();
+  }
 }
 
 // ---------- camera flights ----------
@@ -258,6 +371,7 @@ function enterBuilding(i) {
   camera.updateProjectionMatrix();
   $('info').hidden = true;
   labelRenderer.domElement.hidden = true;
+  cityLadder();
   return reader.show(data, f);
 }
 
@@ -271,6 +385,7 @@ function exitBuilding() {
   labelRenderer.domElement.hidden = false;
   reader.hide();
   if (selected >= 0) $('info').hidden = false;
+  cityLadder();
 }
 
 function updateElevator(dt) {
@@ -355,6 +470,30 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   const i = pick(e);
   if (i >= 0 && data.files[i].alive) enterBuilding(i);
 });
+
+// Zoom past the limits: out of the city up to its world, or into the building under the cursor.
+watchZoom(
+  renderer.domElement,
+  controls,
+  camera,
+  (dir, amount, e) => {
+    if (dir === 'out') {
+      if (owner() && scale.press('out', amount, `Up to @${owner()}'s world`)) ascend();
+      return;
+    }
+    const i = pick(e);
+    if (i >= 0 && data.files[i].alive && scale.press('in', amount, `Into ${data.files[i].p.split('/').pop()}`)) enterBuilding(i);
+  },
+  { enabled: () => !!city && !ascending && !elevator && !flight && !params.has('director') }
+);
+// inside a building, scrolling over the city (not the code) steps back out into the streets
+renderer.domElement.addEventListener(
+  'wheel',
+  (e) => {
+    if (elevator && e.deltaY > 0 && scale.press('out', Math.min(1, Math.abs(e.deltaY) / 100), `Back out to ${repoName()}`)) exitBuilding();
+  },
+  { passive: true }
+);
 
 // ---------- search ----------
 const input = $('search');
@@ -461,7 +600,8 @@ function stepFrame(dt) {
     if (selected >= 0 && !timelapse.active && !elevator) city.setHeat(selected, city.baseHeat[selected] + 0.9 + Math.sin(time * 4) * 0.4);
   }
   updateFlight(dt);
-  if (elevator) updateElevator(dt);
+  if (ascending) updateAscend(dt);
+  else if (elevator) updateElevator(dt);
   else controls.update();
   atmosphere.follow(camera);
   events?.update(dt);

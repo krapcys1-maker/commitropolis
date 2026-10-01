@@ -1,0 +1,96 @@
+/* The scale ladder (src/scale.js), shared by the universe and the city. */
+#scale {
+  position: fixed;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 5;
+  font: 600 10.5px/1.1 'Space Grotesk', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  user-select: none;
+}
+#scale a {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px auto;
+  align-items: center;
+  column-gap: 9px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 9px;
+  color: rgba(214, 224, 255, 0.5);
+  text-decoration: none;
+}
+#scale a[hidden] { display: none; }
+#scale a i {
+  width: 7px;
+  height: 7px;
+  justify-self: center;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+/* the rail between rungs */
+#scale a + a::before {
+  content: '';
+  position: absolute;
+  left: 12.5px;
+  top: -8px;
+  height: 12px;
+  border-left: 1px solid rgba(160, 182, 255, 0.28);
+}
+#scale small {
+  grid-column: 2;
+  margin-top: 3px;
+  font: 500 10.5px/1.2 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: rgba(255, 207, 135, 0.8);
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#scale small:empty { display: none; }
+#scale a.here { color: #fff; background: rgba(8, 11, 24, 0.55); box-shadow: inset 0 0 0 1px rgba(127, 212, 255, 0.28); }
+#scale a.here i { background: #7fd4ff; border-color: #7fd4ff; box-shadow: 0 0 10px #7fd4ff; }
+#scale a.up { color: rgba(214, 224, 255, 0.78); }
+#scale a.up[href], #scale a.up[title]:not([title='']) { cursor: pointer; }
+#scale a.up:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+#scale a.down { color: rgba(214, 224, 255, 0.42); }
+#scale a.down small { color: rgba(214, 224, 255, 0.42); }
+
+#scale-push {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translate(-50%, 6px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(8, 11, 24, 0.82);
+  border: 1px solid rgba(127, 212, 255, 0.4);
+  box-shadow: 0 0 30px rgba(60, 150, 255, 0.18);
+  color: #e6f6ff;
+  font: 600 13px 'Space Grotesk', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 9;
+}
+#scale-push.on { opacity: 1; transform: translate(-50%, 0); }
+#scale-push i { width: 92px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+#scale-push b { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #7fd4ff, #ffcf87); }
+
+@media (max-width: 760px) {
+  #scale { left: 8px; top: auto; bottom: 120px; transform: none; }
+  #scale a { padding: 4px; }
+  #scale a span, #scale a small { display: none; }
+  #scale a.here span { display: inline; }
+}

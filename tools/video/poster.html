@@ -6,7 +6,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <style>
       /* The poster for the film (tools/video/poster.mjs renders it over a frame of the film). */
-      html, body { margin: 0; width: 1600px; height: 900px; overflow: hidden; background: #000; }
+      html, body { margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: #000; }
       .frame { position: absolute; inset: 0; background: center / cover no-repeat; }
       .shade {
         position: absolute;
@@ -94,12 +94,17 @@
     <div class="brand"><i></i>COMMITVERSE</div>
     <div class="play"></div>
     <div class="title">
-      <h1>The Big Bang of open source</h1>
-      <p>From the git singularity to one line of code</p>
+      <h1 id="title">The Big Bang of open source</h1>
+      <p id="sub">From the git singularity to one line of code</p>
     </div>
-    <div class="badge">▶ 1:12 · sound on</div>
+    <div class="badge" id="badge">▶ 1:12 · sound on</div>
     <script>
-      document.getElementById('frame').style.backgroundImage = `url("${new URLSearchParams(location.search).get('frame')}")`;
+      // ?frame=<image> &title= &sub= &badge= &play=0: the same card serves as the repository's social preview
+      const q = new URLSearchParams(location.search);
+      document.getElementById('frame').style.backgroundImage = `url("${q.get('frame')}")`;
+      for (const id of ['title', 'sub', 'badge']) if (q.has(id)) document.getElementById(id).textContent = q.get(id);
+      if (q.get('play') === '0') document.querySelector('.play').remove();
+      if (q.get('badge') === '') document.getElementById('badge').remove();
     </script>
   </body>
 </html>

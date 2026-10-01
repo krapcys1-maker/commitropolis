@@ -9,18 +9,31 @@ Every myth here is a measurement. If a rule can't be computed from public git or
 > Most worlds are small and quiet. A few burn so brightly they bend the galaxy around them. New ones are born every second, out at the edge.
 > You are a cartographer of the **Commitverse**. Your ship, your planet and your map start today.
 
-## The galaxy and its sectors
+## The cluster of galaxies
 
-| Sector | Who lives there | Rule (data) | Look |
+The Commitverse is a cluster of **14 galaxies** around **git**, the singularity at its centre. Every world (account) belongs to exactly one galaxy. The rules run in this order, so the first one that fits wins ([cosmos.js](../src/universe/cosmos.js)):
+
+| Galaxy | Who lives there | Rule (data) | Look |
 |---|---|---|---|
-| **The Singularity** | `git` itself | Fixed at the galactic centre | A black hole with an accretion disk made of commits |
-| **Ancient Worlds** (the core) | Foundational projects: kernels, compilers, languages, early infrastructure | Oldest accounts and repos with sustained activity (IDs near the start and a long history) | Old gold stars, dense and calm |
-| **The Titan Cluster** | The biggest organisations: big tech | Orgs above a threshold of total stars and repos | Giant blue stars ringed with megastructures (their flagship repos) |
-| **The AI Nebula** | Organisations and repos of the AI wave | AI topics, LLM SDK usage, the AI orgs | A violet nebula that ignites around 2023 and is still the fastest-growing region |
-| **The Language Arms** | Most developers | An account's dominant language picks its spiral arm (TypeScript, Python, Rust, Go…) | Each arm tinted in its language colour |
-| **The Stellar Nursery** | **Promising new repos** | Created in the last 12 months, with star velocity in the top percentile | Glowing gas clouds with protostars forming inside; this is where discoveries happen |
-| **The Frontier** | The newest accounts | Highest account IDs | The sparse outer rim, still forming |
-| **The Silent Belt** | Archived and long-abandoned projects | Archived flag, or no pushes for more than 2 years | Cold remnants, drifting ice worlds; a memorial, not a graveyard |
+| **The Titan Galaxy** | The giants of GitHub | 100,000 stars or more | A golden giant elliptical around git |
+| **The AI Galaxy** | Worlds that build AI | AI topics on most of their stars, or one of the AI labs | A violet two-armed spiral |
+| **The Silent Galaxy** | Worlds that went quiet | Archived, or nothing pushed for two years | A dim, distant elliptical: a memorial, not a graveyard |
+| **The Python, JavaScript, TypeScript, Rust, Go, C & C++, JVM & .NET, Apple & Mobile, Functional and Scripting Galaxies** | Everyone else | The family of the world's main language (the Scripting Galaxy takes every language without a galaxy of its own) | Spirals in their languages' colours, one arm per language |
+| **The Rising Galaxy** | Protostars: promising new repos | Created in the last 12 months, among the fastest-climbing | An irregular galaxy of pink star-forming knots; this is where discoveries happen |
+
+Inside a spiral, **older worlds sit nearer the core**: user IDs are sequential, so a galaxy grew outward the way GitHub did. Inside an elliptical, the brightest worlds sit at the heart.
+
+### Migrations: the universe is alive
+
+The universe is reseeded from GitHub every day ([universe.yml](../.github/workflows/universe.yml)). Whatever changed becomes history:
+
+- **Ignition.** When a protostar passes **100,000 ★** it ignites. It leaves the Rising Galaxy, and its world joins the Titans. You see it cross the cluster as a comet.
+- **Migration.** A world whose numbers carry it into another galaxy moves there: it grows into a Titan, falls silent, or turns to AI. The move goes into the migration log and the galactic news.
+- **Joining.** Anyone who stars the project's repository gets a world in the galaxy of their language at the next update.
+
+### The one galaxy (the film)
+
+Before the cluster split up, the Commitverse was drawn as a single galaxy with sectors. That is how it looks in the film, and it is still there at `?galaxy=all`. Its sectors were the Ancient Worlds (the oldest accounts) at the core, the Titan Cluster, the AI Nebula, the Language Arms, the Stellar Nursery, the Frontier and the Silent Belt.
 
 ## Planet development: stars are energy
 
@@ -42,7 +55,7 @@ A planet (a person) develops with the **total stars across its repos**. The scal
 Two rules keep the world alive:
 
 - **Activity keeps the lights on.** A planet whose repos go quiet slowly dims: roads crack, greenery takes back the streets. Work brings it back.
-- **Archived = frozen.** Ice spreads over the planet and it drifts into the Silent Belt.
+- **Archived = frozen.** Ice spreads over the planet and it drifts into the Silent Galaxy.
 
 Stars measure attention, not quality. The lore says so openly: some of the best code lives on quiet planets, and the guide shows people where.
 
@@ -62,11 +75,11 @@ Stars measure attention, not quality. The lore says so openly: some of the best 
 ## You, the cartographer
 
 - **Claim your planet.** Sign in with GitHub, land on your own world, and watch it evolve as you ship.
-- **Discover.** Visit protostars in the Stellar Nursery. If a repo you visited early later reaches 1,000 stars, **your flag stays on it as a first discoverer**. It's a reason to come back every day, and a real, provable claim ("I found it at 40 stars").
+- **Discover.** Visit protostars in the Rising Galaxy. If a repo you visited early later reaches 1,000 stars, **your flag stays on it as a first discoverer**. It's a reason to come back every day, and a real, provable claim ("I found it at 40 stars").
 - **Travel log.** A passport of the worlds you have landed on, stamped with their level when you arrived.
 - **Expeditions.** Guided tours narrated by the AI guide, from verified sources:
   - *The Great Framework Wars* (jQuery → Backbone → Angular → React → Vue → Svelte)
-  - *The Rise of the AI Nebula*
+  - *The Rise of the AI Galaxy*
   - *Ancient Worlds: the code that runs everything*
 - **Galactic news.** Supernovae, launches, impacts and new protostars, as a live feed and a daily digest.
 

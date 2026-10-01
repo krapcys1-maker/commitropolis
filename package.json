@@ -1,5 +1,5 @@
 {
-  "name": "commitropolis",
+  "name": "commitverse",
   "version": "0.1.0",
   "description": "Fly through any Git repository as a 3D city. Folders are districts, files are buildings, history is a timelapse.",
   "type": "module",

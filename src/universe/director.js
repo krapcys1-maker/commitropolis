@@ -81,7 +81,7 @@ export class Director {
     await views.galaxy.load();
     await views.planet.enter(HERO);
     views.planet.noNavigate = true;
-    await go({}, { push: false });
+    await go({ galaxy: 'all' }, { push: false });
     await document.fonts?.ready;
     const { camera, controls } = ctx;
     controls.enabled = false;

@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Sky, radialTexture } from './sky.js';
 import { NOISE } from './glsl.js';
-import { SECTORS, levelOf, langColor, hashString, cityTier, WORLD_STYLES } from './lore.js';
+import { levelOf, langColor, hashString, cityTier, WORLD_STYLES } from './lore.js';
+import { GALAXY } from './cosmos.js';
 import { worldMaterial } from './systemView.js';
 import { loadCityIndex } from './planetView.js';
-import { apiBase, mapCity } from '../config.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const MAX_STRUCTURES = 12;
@@ -118,14 +118,17 @@ export class OrgView {
     this.hovered = -1;
   }
 
-  async enter(login) {
+  // fromCity: the repository whose city we just rose out of; we start beside its megastructure
+  async enter(login, { fromCity } = {}) {
     const { camera, controls, ui } = this.ctx;
-    const [data, index] = await Promise.all([loadOrg(login), loadCityIndex(), this.galaxy.load()]);
+    const [data, index] = await Promise.all([loadOrg(login), loadCityIndex()]);
     this.data = data;
-    const account = this.galaxy.account(data.login);
-    this.sectorKey = account?.sector ?? 'titan';
-    const sector = SECTORS[this.sectorKey];
-    this.stars = Math.max(data.repos.reduce((s, r) => s + r.s, 0), account?.s ?? 0);
+    const repoStars = data.repos.reduce((s, r) => s + r.s, 0);
+    const galaxy = await this.ctx.galaxyFor(data.login, data.repos[0]?.lang, repoStars);
+    const account = galaxy.account(data.login);
+    this.galaxyId = galaxy.spec.id;
+    const sector = galaxy.spec;
+    this.stars = Math.max(repoStars, account?.s ?? 0);
     this.level = levelOf(this.stars);
 
     if (this.group) {
@@ -214,11 +217,22 @@ export class OrgView {
     controls.enabled = true;
     controls.minDistance = starRadius * 1.6;
     controls.maxDistance = 3000;
+    controls.zoomToCursor = false;
     controls.target.set(0, 0, 0);
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.15;
     camera.position.set(0, outer * 0.75, outer * 1.55);
     this.flying = null;
+    const s = fromCity ? this.structures.find((x) => x.repo.n.toLowerCase() === fromCity.toLowerCase()) : null;
+    if (s) {
+      this.group.updateMatrixWorld(true);
+      const at = s.anchor.getWorldPosition(new THREE.Vector3());
+      const start = at.clone().add(at.clone().setY(0).normalize().multiplyScalar(14)).add(new THREE.Vector3(0, 6, 0));
+      camera.position.copy(start);
+      controls.target.copy(at);
+      controls.autoRotate = false;
+      this.flying = { t: 0, dur: 3.0, fromPos: start, toPos: new THREE.Vector3(0, outer * 0.75, outer * 1.55), fromTarget: at, toTarget: new THREE.Vector3(), fadeIn: 'light' };
+    }
 
     ui.card(this.#cardHtml(sector));
     ui.cardEl.querySelectorAll('[data-i]').forEach((el) => {
@@ -228,8 +242,24 @@ export class OrgView {
       el.onmouseleave = () => this.#hover(-1);
     });
     ui.cardEl.querySelectorAll('[data-login]').forEach((el) => (el.onclick = () => this.visitWorld(el.dataset.login)));
-    ui.hint('A star and its megastructures · click a structure to land in its city · click an inhabitant to visit their world');
-    return { sector, catalog: data.login };
+    ui.hint('A star and its megastructures · click or zoom into a structure to land in its city · keep zooming out for the galaxy');
+    return { galaxy: sector, catalog: data.login };
+  }
+
+  get ownsFade() {
+    return !!this.flying;
+  }
+
+  zoomTarget(dir, event, ray) {
+    if (this.flying) return null;
+    if (dir === 'out') return { label: `Out to ${GALAXY[this.galaxyId].name}`, go: () => this.zoomOut() };
+    const hits = new THREE.Raycaster(ray.origin, ray.direction).intersectObjects(this.structures.map((x) => x.mesh), false);
+    const i = hits.length ? this.structures.findIndex((x) => x.mesh === hits[0].object) : 0; // the flagship by default
+    return this.structures[i] ? { label: `Land in ${this.structures[i].repo.n}`, go: () => this.land(i) } : null;
+  }
+
+  zoomOut() {
+    this.ctx.leave(() => this.ctx.go({ galaxy: this.galaxyId, fromStar: this.data.login }));
   }
 
   #cardHtml(sector) {
@@ -278,7 +308,7 @@ export class OrgView {
       return;
     }
     const s = this.structures[i];
-    tip.innerHTML = `<b>${s.repo.n}</b> · ${i === 0 ? 'Dyson ring' : 'megastructure'}<br>${fmt(s.repo.s)} ★ · ${s.repo.lang ?? 'n/a'}${s.repo.d ? `<br><span class="desc">${s.repo.d}</span>` : ''}<br><em>${s.slug ? 'Click to land' : 'Uncharted: click to survey it'}</em>`;
+    tip.innerHTML = `<b>${s.repo.n}</b> · ${i === 0 ? 'Dyson ring' : 'megastructure'}<br>${fmt(s.repo.s)} ★ · ${s.repo.lang ?? 'n/a'}${s.repo.d ? `<br><span class="desc">${s.repo.d}</span>` : ''}<br><em>${s.slug ? 'Click to land · its whole history' : 'Click to land · history not surveyed yet'}</em>`;
     tip.style.left = `${Math.min(event.clientX + 16, innerWidth - 320)}px`;
     tip.style.top = `${event.clientY + 16}px`;
     tip.hidden = false;
@@ -290,26 +320,9 @@ export class OrgView {
     if (hits.length) this.land(this.structures.findIndex((s) => s.mesh === hits[0].object));
   }
 
-  async land(i) {
+  land(i) {
     const s = this.structures[i];
-    const { ui } = this.ctx;
-    ui.tooltipEl.hidden = true;
-    if (!s.slug) {
-      if (!(await apiBase())) {
-        ui.toast(`<b>${s.repo.n}</b> is uncharted: its history hasn't been mapped yet. <a href="https://github.com/${this.data.login}/${s.repo.n}" target="_blank" rel="noopener">View on GitHub ↗</a>`);
-        return;
-      }
-      const repo = `${this.data.login}/${s.repo.n}`;
-      ui.survey(repo, 'queued');
-      try {
-        s.slug = await mapCity(repo, (job) => ui.survey(repo, job.step, job.position));
-        ui.survey(null);
-      } catch (err) {
-        ui.survey(null);
-        ui.toast(`Couldn't map <b>${s.repo.n}</b>: ${err.message}`);
-        return;
-      }
-    }
+    this.ctx.ui.tooltipEl.hidden = true;
     const { camera, controls } = this.ctx;
     const at = s.anchor.getWorldPosition(new THREE.Vector3());
     const dir = camera.position.clone().sub(at).normalize();
@@ -321,7 +334,7 @@ export class OrgView {
       toPos: at.clone().addScaledVector(dir, 6),
       fromTarget: controls.target.clone(),
       toTarget: at,
-      then: () => (location.href = `city.html?repo=${encodeURIComponent(s.slug)}&from=${encodeURIComponent(this.data.login)}&arrive=1`),
+      then: () => (location.href = `city.html?repo=${encodeURIComponent(s.slug ?? `${this.data.login}/${s.repo.n}`)}&from=${encodeURIComponent(this.data.login)}&arrive=1`),
     };
   }
 
@@ -351,8 +364,10 @@ export class OrgView {
       camera.position.lerpVectors(f.fromPos, f.toPos, e);
       controls.target.lerpVectors(f.fromTarget, f.toTarget, e);
       camera.lookAt(controls.target);
-      ui.fade(Math.max(0, (f.t - 0.72) / 0.28));
+      if (f.fadeIn) ui.fade(Math.max(0, 1 - (f.t * f.dur) / (f.fadeIn === 'light' ? 1.2 : 0.35)), f.fadeIn);
+      else ui.fade(Math.max(0, (f.t - 0.72) / 0.28));
       if (f.t >= 1 && !f.done) {
+        if (!f.then) controls.autoRotate = true;
         f.done = true;
         this.flying = null;
         f.then?.();

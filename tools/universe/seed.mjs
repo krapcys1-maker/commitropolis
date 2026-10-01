@@ -1,13 +1,17 @@
 #!/usr/bin/env node
-// Seeds the Commitverse galaxy from the GitHub API: the top repositories per language, AI topics and
-// fast-rising new repos (the Stellar Nursery), aggregated into accounts (worlds). Also bakes full
-// planet data (profile + all repos) for a handful of showcase worlds.
+// Seeds the Commitverse from the GitHub API: the top repositories in ~45 languages, AI topics and
+// fast-rising new repos (protostars), aggregated into accounts (worlds); everyone who starred the
+// project's own repo joins too. Run daily (.github/workflows/universe.yml), it also logs what moved:
+// worlds that migrated to another galaxy, protostars that ignited into megastars.
+// Bakes full planet data (profile + all repos) for a handful of showcase worlds.
 //
 //   GITHUB_TOKEN=$(gh auth token) node tools/universe/seed.mjs
 //
-// Output: public/universe/galaxy.json, public/universe/planets/<login>.json
+// Output: public/universe/galaxy.json, public/universe/migrations.json, public/universe/planets/<login>.json
 import fs from 'node:fs';
 import path from 'node:path';
+import { galaxyOf } from '../../src/universe/cosmos.js';
+import { logMoves } from './migrations.mjs';
 
 const OUT = 'public/universe';
 if (process.argv.includes('--patch-only')) {
@@ -50,10 +54,12 @@ async function search(q, pages = 1) {
   return items;
 }
 
-const LANGUAGES = [
-  'JavaScript', 'TypeScript', 'Python', 'Rust', 'Go', 'Java', 'C++', 'C', 'C#', 'PHP', 'Ruby', 'Swift',
-  'Kotlin', 'Shell', 'Jupyter Notebook', 'Dart', 'Scala', 'Zig', 'Lua', 'Haskell', 'Elixir', 'HTML', 'Vue',
-];
+// The big languages get several pages of results (up to 100 repos each), the rest one or two.
+const BIG = ['JavaScript', 'TypeScript', 'Python', 'Rust', 'Go', 'Java', 'C++', 'C', 'C#', 'PHP', 'Ruby', 'Swift', 'Kotlin', 'Shell', 'Jupyter Notebook', 'Dart'];
+const MID = ['Scala', 'Zig', 'Lua', 'Haskell', 'Elixir', 'HTML', 'Vue', 'CSS', 'Svelte', 'R', 'Julia', 'Objective-C', 'Perl', 'Clojure', 'Cuda'];
+const SMALL = ['OCaml', 'Erlang', 'Nim', 'Crystal', 'Assembly', 'PowerShell', 'Groovy', 'F#', 'Elm', 'Gleam', 'Vim Script', 'Emacs Lisp', 'Racket', 'Solidity', 'Nix'];
+const PAGES = Number(process.env.SEED_PAGES ?? 5);
+const LANGUAGES = [...BIG.map((l) => [l, PAGES]), ...MID.map((l) => [l, 2]), ...SMALL.map((l) => [l, 1])];
 const AI_TOPICS = ['llm', 'machine-learning', 'deep-learning', 'ai-agents', 'generative-ai', 'large-language-models'];
 const AI_RE = /(^|-)(ai|llm|llms|gpt|ml|machine-learning|deep-learning|neural|transformer|transformers|agent|agents|rag|diffusion|generative-ai|langchain|pytorch|tensorflow|nlp)($|-)/;
 
@@ -69,16 +75,39 @@ function add(items, reason) {
 }
 
 console.log('Seeding languages…');
-for (const lang of LANGUAGES) {
-  add(await search(`language:"${lang}" stars:>500`, 2), `lang:${lang}`);
+for (const [lang, pages] of LANGUAGES) {
+  add(await search(`language:"${lang}" stars:>${pages > 1 ? 300 : 100}`, pages), `lang:${lang}`);
   console.log(`  ${lang}: ${repos.size} repos so far`);
 }
-console.log('Seeding the AI Nebula…');
-for (const topic of AI_TOPICS) add(await search(`topic:${topic} stars:>300`, 1), 'ai');
-console.log('Seeding the Stellar Nursery…');
+console.log('Seeding the AI Galaxy…');
+for (const topic of AI_TOPICS) add(await search(`topic:${topic} stars:>300`, 2), 'ai');
+console.log('Seeding the Rising Galaxy…');
 const since = new Date(Date.now() - 365 * 86400e3).toISOString().slice(0, 10);
-const nurseryItems = await search(`created:>${since} stars:>200`, 3);
+const nurseryItems = await search(`created:>${since} stars:>200`, 5);
 add(nurseryItems, 'nursery');
+
+// Everyone who starred this project's repo gets a world in the Commitverse.
+const JOIN_REPO = process.env.JOIN_REPO ?? process.env.GITHUB_REPOSITORY ?? 'krapcys1-maker/commitverse';
+const stargazers = [];
+try {
+  for (let page = 1; page <= 10; page++) {
+    const batch = await api(`/repos/${JOIN_REPO}/stargazers?per_page=100&page=${page}`);
+    stargazers.push(...batch);
+    if (batch.length < 100) break;
+  }
+} catch (err) {
+  console.log(`  no stargazers (${err.message})`);
+}
+const joinedLogins = new Set(stargazers.map((u) => u.login));
+const known = new Set([...repos.values()].map((r) => r.owner.login));
+const newcomers = stargazers.filter((u) => !known.has(u.login)).slice(0, Number(process.env.JOIN_MAX ?? 400));
+console.log(`Joining: ${stargazers.length} stargazers of ${JOIN_REPO}, ${newcomers.length} new worlds`);
+const bare = []; // stargazers without public repos still get a (barren) world
+for (const u of newcomers) {
+  const own = (await api(`/users/${u.login}/repos?per_page=100&type=owner&sort=pushed`).catch(() => [])).filter((r) => !r.fork);
+  if (own.length) add(own, 'joined');
+  else bare.push(u);
+}
 
 // ---- aggregate accounts (worlds)
 const accounts = new Map();
@@ -101,8 +130,11 @@ const now = Date.now() / 1000;
 const list = [...accounts.values()].map((a) => {
   const lang = Object.entries(a.langs).sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'Other';
   const top = a.top.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([n]) => n);
-  return { l: a.l, i: a.i, t: a.t, s: a.s, n: a.n, lang, ai: +(a.ai / Math.max(a.s, 1)).toFixed(2), pushed: Math.round(a.pushed), arch: +(a.archived / Math.max(a.s, 1)).toFixed(2), top };
+  const world = { l: a.l, i: a.i, t: a.t, s: a.s, n: a.n, lang, ai: +(a.ai / Math.max(a.s, 1)).toFixed(2), pushed: Math.round(a.pushed), arch: +(a.archived / Math.max(a.s, 1)).toFixed(2), top };
+  if (joinedLogins.has(a.l)) world.joined = 1;
+  return world;
 });
+for (const u of bare) list.push({ l: u.login, i: u.id, t: u.type === 'Organization' ? 'O' : 'U', s: 0, n: 0, lang: 'Other', ai: 0, pushed: Math.round(now), arch: 0, top: [], joined: 1 });
 
 // ---- sectors (see docs/LORE.md): data rules, in priority order
 const orgsByStars = list.filter((a) => a.t === 'O').sort((x, y) => y.s - x.s);
@@ -112,6 +144,7 @@ const idCut = list.map((a) => a.i).sort((x, y) => x - y)[Math.floor(list.length 
 const AI_ORGS = new Set(['anthropics', 'openai', 'huggingface', 'pytorch', 'ollama', 'google-deepmind', 'deepseek-ai', 'meta-llama', 'mistralai', 'langchain-ai', 'ggml-org', 'qwenlm', 'lm-sys', 'vllm-project', 'unslothai']);
 for (const a of list) {
   if (AI_ORGS.has(a.l.toLowerCase())) a.sector = 'ai';
+  else if (a.joined && a.s < 2000) a.sector = 'arm'; // a newcomer starts in its language's galaxy
   else if (a.arch > 0.8 || now - a.pushed > 2 * 365 * 86400) a.sector = 'silent';
   else if (a.ai >= 0.5 && a.s >= 2000) a.sector = 'ai';
   else if (titans.has(a.l)) a.sector = 'titan';
@@ -123,13 +156,29 @@ const nursery = nurseryItems
   .filter((r) => !r.fork)
   .map((r) => ({ r: r.full_name, s: r.stargazers_count, c: Math.round(Date.parse(r.created_at) / 1000), lang: r.language ?? 'Other', ai: AI_RE.test([...(r.topics ?? []), r.name.toLowerCase()].join(' ')) ? 1 : 0 }))
   .sort((x, y) => y.s - x.s)
-  .slice(0, 240);
+  .slice(0, 400);
+
+// Account ages: GitHub user IDs are sequential, so a few real creation dates date every world (cosmos.js).
+const galaxyFile = path.join(OUT, 'galaxy.json');
+const prev = fs.existsSync(galaxyFile) ? JSON.parse(fs.readFileSync(galaxyFile, 'utf8')) : null;
+const byId = [...list].sort((x, y) => x.i - y.i);
+const anchors = new Map((prev?.ages ?? []).map(([i, t]) => [i, t]));
+for (let k = 0; k <= 15; k++) {
+  const a = byId[Math.round((k / 15) * (byId.length - 1))];
+  if ([...anchors.keys()].some((i) => Math.abs(i - a.i) < a.i * 0.02)) continue;
+  try {
+    anchors.set(a.i, Math.round(Date.parse((await api(`/users/${a.l}`)).created_at) / 1000));
+  } catch {}
+}
+const ages = [...anchors].sort((x, y) => x[0] - y[0]);
 
 fs.mkdirSync(path.join(OUT, 'planets'), { recursive: true });
-const galaxy = { version: 1, generatedAt: new Date().toISOString(), accounts: list.sort((x, y) => y.s - x.s), nursery };
-fs.writeFileSync(path.join(OUT, 'galaxy.json'), JSON.stringify(galaxy));
+const galaxy = { version: 1, generatedAt: new Date().toISOString(), joinRepo: JOIN_REPO, accounts: list.sort((x, y) => y.s - x.s), nursery, ages };
+fs.writeFileSync(galaxyFile, JSON.stringify(galaxy));
 const counts = list.reduce((m, a) => ((m[a.sector] = (m[a.sector] ?? 0) + 1), m), {});
+const galaxies = list.reduce((m, a) => ((m[galaxyOf(a)] = (m[galaxyOf(a)] ?? 0) + 1), m), {});
 console.log(`Galaxy: ${list.length} worlds from ${repos.size} repos, ${nursery.length} protostars`, counts);
+console.log('  by galaxy', galaxies);
 
 // ---- planets: full profile + all public repos for showcase worlds
 const SHOWCASE = (process.env.PLANETS ?? 'karpathy,torvalds,sindresorhus,tj,antirez,yyx990803,gaearon,mitchellh,simonw,ggerganov,rich-harris,dhh').split(',');
@@ -173,6 +222,10 @@ for (const login of SHOWCASE) {
 
 // Showcase worlds know their full totals: let the galaxy agree with the planet view.
 patchGalaxyWithPlanets();
+
+// What moved since the last chart, now that every total is final (migrations.mjs).
+const log = logMoves(prev, JSON.parse(fs.readFileSync(galaxyFile, 'utf8')));
+console.log(`${log.events.length} events in the migration log`);
 
 function patchGalaxyWithPlanets() {
   const AI = /(^|-)(ai|llm|llms|gpt|ml|machine-learning|deep-learning|neural|transformer|transformers|agent|agents|rag|diffusion|generative-ai|langchain|pytorch|tensorflow|nlp)($|-)/;
