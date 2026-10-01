@@ -211,11 +211,13 @@ query ─► embed (voyage-code-3, query) ─► top-k chunks (k≈20, hybrid)
 
 Given the eras, the key events and the city geometry, Claude writes a **shot list** as JSON: keyframes of `{ t, target (path/district), distance, azimuth, elevation, caption }`. We validate it (targets exist, pacing stays within limits), and the capture pipeline renders it. A human can edit the JSON before rendering.
 
-## 7. Video pipeline
+## 7. Video pipeline (`tools/video/`)
 
-- **Capture mode (`?capture=1`)** is already wired. There is no rAF loop, the drawing buffer is preserved, and `window.commitropolis.stepFrame(dt)` advances the simulation, the camera and the render deterministically.
-- **Driver (planned):** Playwright runs headless Chromium with GPU flags and steps N frames at `dt = 1/60`. Each frame's canvas is piped as PNG to **ffmpeg**, giving H.264 MP4 at 60 fps. Presets are 1920×1080 and 1080×1920, with caption safe areas. The date counter, repo name and era captions are drawn in-canvas, so they are captured too.
-- **Camera path:** keyframes joined by a Catmull-Rom spline (`CatmullRomCurve3`) for position and target, eased in time.
+- **Capture mode (`?capture`).** There is no rAF loop, and the drawing buffer is preserved. `window.commitropolis.stepFrame(dt)` and `window.commitverse.stepFrame(dt)` advance the simulation, the camera and the render deterministically.
+- **Director mode (`?director`).** A director script owns the camera, the captions and the timing. It hides the HUD, turns off CSS transitions, and sets every fade itself from its own clock. With `?capture` added, it waits to be stepped. The universe part is `src/universe/director.js` (the galaxy as of each year, the dive, the world, the landing). The city part is `src/cityDirector.js` (arrival, timelapse, the elevator, the end card). Camera paths are monotone cubic curves through keyframes, so nothing overshoots.
+- **Driver (`capture.mjs`).** Playwright runs headless Edge or Chrome on the GPU (ANGLE/D3D11), steps each director by exactly 1/30 s, screenshots the page (WebGL plus DOM captions) and pipes JPEG frames to ffmpeg. The two parts join on a white frame: the universe ends in the clouds, and the city begins in them. The run also writes a cue sheet: when each rocket and asteroid in the city happened.
+- **Score (`score.mjs`).** The soundtrack is synthesised, with no samples: pads, Karplus-Strong plucks, FM bells, drums, risers and booms, plus Freeverb. It follows the film's timeline, and the city's impacts are placed from the cue sheet.
+- Capture from `vite preview`, not the dev server: hot reload would interrupt the run.
 - **Gallery:** a weekly scheduled GitHub Action ingests a curated list of famous repos, renders their videos, and publishes the bundles and MP4s.
 
 ## 8. Hosting and distribution

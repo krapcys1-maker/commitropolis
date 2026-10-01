@@ -54,6 +54,12 @@ export function loadCityIndex() {
 
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+// From a to b around the planet (never through it): slerp the direction, lerp the altitude.
+function arc(a, b, k) {
+  const turn = new THREE.Quaternion().setFromUnitVectors(a.clone().normalize(), b.clone().normalize());
+  return a.clone().normalize().applyQuaternion(new THREE.Quaternion().slerp(turn, k)).multiplyScalar(THREE.MathUtils.lerp(a.length(), b.length(), k));
+}
+
 export class PlanetView {
   constructor(ctx) {
     this.ctx = ctx;
@@ -268,7 +274,7 @@ export class PlanetView {
     this.planet.uniforms.uSunDir.value.lerpVectors(L.sunFrom, L.sunTo, ease(align)).normalize();
 
     const above = L.normal.clone().multiplyScalar(R * 2.1).addScaledVector(L.tangent, R * 0.35);
-    const pos = new THREE.Vector3().lerpVectors(L.from, above, ease(align));
+    const pos = arc(L.from, above, ease(align));
     const cityPoint = L.normal.clone().multiplyScalar(R);
     if (descend > 0) {
       const e = descend * descend;
@@ -281,7 +287,7 @@ export class PlanetView {
     controls.target.copy(look);
     camera.lookAt(look);
     ui.fade(Math.max(0, (descend - 0.72) / 0.28));
-    if (L.t > 4.7 && !L.done) {
+    if (L.t > 4.7 && !L.done && !this.noNavigate) {
       L.done = true;
       location.href = `city.html?repo=${encodeURIComponent(L.city.slug)}&from=${encodeURIComponent(this.data.login)}&arrive=1`;
     }

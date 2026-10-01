@@ -66,7 +66,7 @@ html, body {
 #crumbs i { font-style: normal; opacity: 0.5; }
 .spacer { flex: 1; }
 
-input[type='search'], button {
+input[type='search'], button, .hud-btn {
   font: inherit;
   color: var(--text);
   background: rgba(255, 255, 255, 0.05);
@@ -76,7 +76,8 @@ input[type='search'], button {
 }
 input[type='search'] { width: 230px; }
 button { cursor: pointer; }
-button:hover { background: rgba(255, 255, 255, 0.1); }
+button:hover, .hud-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.hud-btn { text-decoration: none; white-space: nowrap; color: var(--gold); }
 
 #card {
   position: fixed;

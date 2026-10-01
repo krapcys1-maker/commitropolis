@@ -5,3 +5,4 @@ dist/
 *.log
 .claude/
 server-data/
+/video/

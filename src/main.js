@@ -84,14 +84,13 @@ let flight = null;
 let elevator = null; // camera ride along a building's facade while its code is open
 let events = null; // rockets and asteroid impacts in the timelapse
 let shake = null;
-let captionTimer = 0;
+let captionUntil = 0; // on the frame clock, so captions behave the same live and in a frame-by-frame capture
 
 function showCaption(text) {
   const el = $('caption');
   el.textContent = text;
   el.classList.add('show');
-  clearTimeout(captionTimer);
-  captionTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  captionUntil = time + 2.6;
 }
 
 const fmtDate = (t) => new Date(t * 1000).toISOString().slice(0, 10);
@@ -259,7 +258,7 @@ function enterBuilding(i) {
   camera.updateProjectionMatrix();
   $('info').hidden = true;
   labelRenderer.domElement.hidden = true;
-  reader.show(data, f);
+  return reader.show(data, f);
 }
 
 function exitBuilding() {
@@ -476,6 +475,10 @@ function stepFrame(dt) {
   camera.position.add(jolt);
   composer.render();
   camera.position.sub(jolt);
+  if (captionUntil && time > captionUntil) {
+    $('caption').classList.remove('show');
+    captionUntil = 0;
+  }
   fadeLabels();
   labelRenderer.render(scene, camera);
 }
@@ -491,8 +494,12 @@ function loop() {
 window.commitropolis = {
   get city() { return city; },
   get timelapse() { return timelapse; },
+  get data() { return data; },
+  get flight() { return flight; },
+  get events() { return events; },
   camera,
   controls,
+  reader,
   flyTo,
   enterBuilding,
   exitBuilding,
@@ -500,4 +507,12 @@ window.commitropolis = {
 };
 
 await loadIndex();
-if (!captureMode) loop();
+if (params.has('director')) {
+  // the film, part two (tools/video/capture.mjs): no HUD, the director drives every frame
+  document.body.classList.add('director');
+  finish.uniforms.uGrainAnim.value = 0; // a static dither: moving grain only costs video bitrate
+  finish.uniforms.uGrain.value = 0.014;
+  const { CityDirector } = await import('./cityDirector.js');
+  window.director = new CityDirector(window.commitropolis);
+  await window.director.prepare();
+} else if (!captureMode) loop();

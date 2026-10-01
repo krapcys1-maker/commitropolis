@@ -90,7 +90,7 @@ export function createBuildingMaterial(uniforms) {
           float cc_t = clamp(dot(vWorld - uCamPos, cc_ab) / max(dot(cc_ab, cc_ab), 1e-4), 0.0, 1.0);
           float cc_off = length(vWorld - uCamPos - cc_ab * cc_t);
           float cc_fade = (1.0 - smoothstep(uTunnel * 0.55, uTunnel, cc_off)) * step(cc_t, 0.97);
-          if (cc_hash(vec3(floor(gl_FragCoord.xy), 3.0)) < cc_fade * 0.94) discard;
+          if (cc_hash(vec3(floor(gl_FragCoord.xy), 3.0)) < cc_fade) discard;
         }
         vec3 cc_hue = diffuseColor.rgb;
         float cc_roof = step(0.5, vObjNormal.y);
@@ -296,7 +296,8 @@ export function createBeamMaterial() {
 
 // Final touch after tone mapping: vignette and a little film grain.
 export const FinishShader = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 } },
+  // uGrainAnim 0 freezes the grain into a static dither (the film: moving grain costs video bitrate)
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0.022 }, uGrainAnim: { value: 1 } },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() {
@@ -306,13 +307,15 @@ export const FinishShader = {
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform float uTime;
+    uniform float uGrain;
+    uniform float uGrainAnim;
     varying vec2 vUv;
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       vec2 p = vUv - 0.5;
       c.rgb *= mix(0.62, 1.0, smoothstep(0.9, 0.25, length(p * vec2(1.0, 0.85))));
-      float g = fract(sin(dot(vUv * (1.0 + fract(uTime)), vec2(12.9898, 78.233))) * 43758.5453);
-      c.rgb += (g - 0.5) * 0.022;
+      float g = fract(sin(dot(vUv * (1.0 + fract(uTime) * uGrainAnim), vec2(12.9898, 78.233))) * 43758.5453);
+      c.rgb += (g - 0.5) * uGrain;
       gl_FragColor = c;
     }`,
 };

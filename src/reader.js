@@ -69,6 +69,16 @@ export class CodeReader {
     this.root.hidden = true;
   }
 
+  // Scripted scrolling (the film): report the new range at once instead of waiting for the scroll event.
+  scrollTo(top) {
+    this.body.scrollTop = top;
+    this.#report();
+  }
+
+  get scrollMax() {
+    return Math.max(0, this.lines * LINE_HEIGHT + 20 - this.body.clientHeight);
+  }
+
   #message(text) {
     this.lines = 0;
     this.gutter.textContent = '';

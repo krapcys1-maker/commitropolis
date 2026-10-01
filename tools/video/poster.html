@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Film poster</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+    <style>
+      /* The poster for the film (tools/video/poster.mjs renders it over a frame of the film). */
+      html, body { margin: 0; width: 1600px; height: 900px; overflow: hidden; background: #000; }
+      .frame { position: absolute; inset: 0; background: center / cover no-repeat; }
+      .shade {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(to top, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.1) 46%, transparent 60%),
+          radial-gradient(ellipse at 50% 46%, transparent 30%, rgba(0, 0, 0, 0.4) 80%);
+      }
+      .brand {
+        position: absolute;
+        top: 46px;
+        left: 56px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 20px 'Space Grotesk', sans-serif;
+        letter-spacing: 0.34em;
+        color: #fff;
+      }
+      .brand i {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #fff, #ffcf87 30%, #ff8a3d 55%, transparent 60%), radial-gradient(circle, transparent 55%, rgba(127, 212, 255, 0.9) 60%, transparent 70%);
+        box-shadow: 0 0 18px rgba(255, 180, 90, 0.9);
+      }
+      .play {
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        width: 132px;
+        height: 132px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: rgba(10, 14, 30, 0.42);
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        box-shadow: 0 0 60px rgba(127, 190, 255, 0.45), inset 0 0 30px rgba(127, 190, 255, 0.25);
+        backdrop-filter: blur(6px);
+      }
+      .play::after {
+        content: '';
+        position: absolute;
+        left: 52px;
+        top: 38px;
+        border-left: 48px solid #fff;
+        border-top: 28px solid transparent;
+        border-bottom: 28px solid transparent;
+        filter: drop-shadow(0 0 10px rgba(127, 190, 255, 0.8));
+      }
+      .title {
+        position: absolute;
+        left: 56px;
+        right: 56px;
+        bottom: 54px;
+      }
+      .title h1 {
+        margin: 0;
+        font: 700 76px/1 'Space Grotesk', sans-serif;
+        letter-spacing: 0.01em;
+        color: #fff;
+        text-shadow: 0 0 40px rgba(127, 170, 255, 0.5), 0 3px 12px rgba(0, 0, 0, 0.9);
+      }
+      .title p {
+        margin: 18px 0 0;
+        font: 500 22px 'JetBrains Mono', monospace;
+        color: #ffcf87;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+      }
+      .badge {
+        position: absolute;
+        right: 56px;
+        bottom: 60px;
+        padding: 10px 18px;
+        border: 1px solid rgba(255, 207, 135, 0.6);
+        border-radius: 999px;
+        font: 500 20px 'JetBrains Mono', monospace;
+        color: #ffcf87;
+        background: rgba(0, 0, 0, 0.35);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame" id="frame"></div>
+    <div class="shade"></div>
+    <div class="brand"><i></i>COMMITVERSE</div>
+    <div class="play"></div>
+    <div class="title">
+      <h1>The Big Bang of open source</h1>
+      <p>From the git singularity to one line of code</p>
+    </div>
+    <div class="badge">▶ 1:12 · sound on</div>
+    <script>
+      document.getElementById('frame').style.backgroundImage = `url("${new URLSearchParams(location.search).get('frame')}")`;
+    </script>
+  </body>
+</html>

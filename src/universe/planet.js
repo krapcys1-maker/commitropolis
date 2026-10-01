@@ -277,6 +277,13 @@ export class Planet {
         varying vec3 vDir;
         varying vec3 vWorld;
 
+        // a thin bright line where a noise field crosses zero, anti-aliased: when it gets thinner than a
+        // pixel it widens and dims, keeping its average brightness instead of sparkling
+        float streak(float n, float k) {
+          float w = fwidth(n);
+          return (1.0 - smoothstep(0.0, k + w, abs(n))) * k / (k + w);
+        }
+
         void main() {
           vec3 dir = normalize(vDir);
           float h = texture(uHeight, dir).r;
@@ -335,11 +342,13 @@ export class Planet {
             float between = step(0.0, dot(cross(a, dir), gn)) * step(0.0, dot(cross(dir, b), gn));
             roads = max(roads, exp(-pow(d / 0.0035, 2.0)) * between);
           }
-          // neighbourhoods and street grain, so lights cluster like a real city at night
-          float blocks = smoothstep(0.1, 0.65, snoise(dir * 70.0 + 3.0) * 0.5 + 0.5);
-          float grain = 0.45 + 0.55 * step(0.45, hash13(floor(dir * 1600.0)));
-          lights = lights * mix(0.2, 1.0, blocks) * grain + roads * 0.55 * grain;
-          lights += uGlobal * blocks * grain * 0.045; // ecumenopolis: the whole land glimmers
+          // the texture of lights: a network of arteries and streets (brightest where they cross)
+          // over a fine grain of lit blocks, so cities read like real ones from orbit at night
+          float net = streak(snoise(dir * 23.0 + 11.0), 0.05) + streak(snoise(dir * 61.0 - 5.0), 0.045) * 0.75 + streak(snoise(dir * 150.0 + 3.0), 0.045) * 0.5;
+          float grain = mix(step(0.6, hash13(floor(dir * 1600.0))), 0.4, clamp(length(fwidth(dir)) * 1600.0 - 0.5, 0.0, 1.0));
+          float density = smoothstep(0.2, 0.8, snoise(dir * 7.0 + 3.0) * 0.5 + 0.5);
+          lights = lights * (0.16 + net * 1.15 + grain * 0.3) + roads * 0.55;
+          lights += uGlobal * mix(0.2, 1.0, density) * (net * 0.2 + grain * 0.035); // ecumenopolis: the whole land is city
           lights *= 1.0 - ocean;
           color = mix(color, vec3(0.34, 0.33, 0.32), urban * 0.55 * (1.0 - ocean));
 

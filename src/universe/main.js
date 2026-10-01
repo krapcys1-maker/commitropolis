@@ -119,6 +119,15 @@ views.system = new SystemView(ctx, views.galaxy);
 views.org = new OrgView(ctx, views.galaxy);
 let current = null;
 
+// CSS2D labels live in one shared layer: hide the old scene's when another scene takes the screen
+// (the renderer only updates labels of the scene it draws, so they'd stay frozen in place).
+let shownScene = null;
+function show(scene) {
+  if (shownScene && shownScene !== scene) shownScene.traverse((o) => o.isCSS2DObject && (o.element.style.display = 'none'));
+  shownScene = scene;
+  renderPass.scene = scene;
+}
+
 async function go(route, { push = true } = {}) {
   ui.loading(route.planet ? `Approaching @${route.planet}…` : route.system ? 'Entering the system…' : 'Charting the galaxy…');
   ui.card('');
@@ -155,7 +164,7 @@ async function go(route, { push = true } = {}) {
       ui.crumbs([{ label: 'Commitverse' }]);
       document.title = 'Commitverse';
     }
-    renderPass.scene = current.scene;
+    show(current.scene);
     const url = route.planet ? `?planet=${encodeURIComponent(route.planet)}` : route.system ? `?system=${encodeURIComponent(route.system)}` : route.sector ? `?sector=${route.sector}` : './';
     if (push) history.pushState(route, '', url);
   } catch (err) {
@@ -258,9 +267,23 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-// Hooks for scripted capture and tests: step the world with a fixed dt.
-window.commitverse = { ctx, views, go, stepFrame, get current() { return current; } };
+// Hooks for scripted capture and tests: step the world with a fixed dt, switch views directly.
+function setView(view) {
+  current = view;
+  show(view.scene);
+}
+window.commitverse = { ctx, views, go, stepFrame, setView, renderPass, get current() { return current; } };
+if (params.has('director')) {
+  // the film: no prologue overlay, no UI, the director drives every frame (tools/video/capture.mjs)
+  document.body.classList.add('director');
+  finish.uniforms.uGrainAnim.value = 0; // a static dither: moving grain only costs video bitrate
+  finish.uniforms.uGrain.value = 0.014;
+  const { Director } = await import('./director.js');
+  window.director = new Director(window.commitverse);
+  await window.director.prepare();
+} else {
 const intro = prologue();
 await go(params.get('planet') ? { planet: params.get('planet') } : params.get('system') ? { system: params.get('system') } : { sector: params.get('sector') }, { push: false });
-frame();
+if (!params.has('capture')) frame();
 await intro;
+}

@@ -1,0 +1,158 @@
+/* Director mode (?director): the film. No HUD, no CSS transitions (every frame is set by the director,
+   so a frame-by-frame capture looks exactly like real-time playback), and the cinematic caption layer. */
+
+body.director .hud-top,
+body.director #card,
+body.director #hint,
+body.director #toast,
+body.director #survey,
+body.director #codex,
+body.director #prologue,
+body.director .bar,
+body.director #info,
+body.director #legend,
+body.director #tooltip,
+body.director #loading,
+body.director #reader-close,
+body.director #reader-gh { display: none !important; }
+body.director *,
+body.director *::before,
+body.director *::after { transition: none !important; animation: none !important; }
+body.director .city-label,
+body.director .sector-label { pointer-events: none; }
+body.director .sector-label { filter: opacity(var(--sector-alpha, 0)); background: rgba(4, 6, 16, 0.62); }
+body.director .nova-label { display: none !important; }
+body.director #reader { top: 7vh; bottom: 16vh; }
+body.director #caption { top: 7vh; font-size: 17px; padding: 10px 20px; }
+/* the universe's white-out matches the city's cloud veil, so the cut between the two is invisible */
+body.director #fade { background: radial-gradient(ellipse at center, #f4f8ff, #dde8ff 60%, #c9d8f5); }
+
+#cine {
+  --cine-font: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --cine-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --cine-gold: #ffcf87;
+  --cine-blue: #7fd4ff;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+/* a soft darkening under the captions so they read over bright cities and galaxies */
+#cine .cine-shade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42vh;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.32) 45%, transparent);
+  opacity: 0;
+}
+#cine .cine-center {
+  position: absolute;
+  left: 50%;
+  bottom: 13vh;
+  transform: translateX(-50%);
+  width: min(1100px, 90vw);
+  text-align: center;
+  opacity: 0;
+}
+#cine .cine-title {
+  font: 600 clamp(26px, 3.4vw, 54px) / 1.15 var(--cine-font);
+  letter-spacing: 0.01em;
+  color: #f4f6ff;
+  text-shadow: 0 0 32px rgba(127, 170, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+#cine .cine-sub {
+  margin-top: 0.55em;
+  font: 500 clamp(14px, 1.45vw, 24px) / 1.3 var(--cine-mono);
+  letter-spacing: 0.06em;
+  color: var(--cine-gold);
+  text-shadow: 0 0 18px rgba(255, 190, 110, 0.55), 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+#cine .cine-sub:empty { display: none; }
+#cine .cine-center.aside { left: 29vw; width: min(900px, 52vw); }
+#cine .cine-year {
+  position: absolute;
+  top: 7vh;
+  right: 6vw;
+  text-align: right;
+  opacity: 0;
+}
+#cine .cine-year b {
+  display: block;
+  font: 600 clamp(40px, 5.6vw, 96px) / 1 var(--cine-mono);
+  color: #fff;
+  text-shadow: 0 0 30px rgba(127, 212, 255, 0.6), 0 0 18px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+#cine .cine-year.date b { font-size: clamp(28px, 3.3vw, 58px); }
+#cine .cine-year span {
+  font: 500 clamp(12px, 1.2vw, 20px) var(--cine-mono);
+  letter-spacing: 0.12em;
+  color: var(--cine-blue);
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.95), 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+#cine .cine-top {
+  position: absolute;
+  top: 8vh;
+  left: 6vw;
+  font: 600 clamp(12px, 1.1vw, 18px) var(--cine-font);
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: #cfd8ff;
+  opacity: 0;
+  text-shadow: 0 0 16px rgba(127, 170, 255, 0.6);
+}
+#cine .cine-top small {
+  display: block;
+  margin-top: 0.7em;
+  font: 500 0.82em var(--cine-mono);
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: var(--cine-gold);
+}
+
+#cine .cine-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+
+/* end card */
+#cine .cine-end {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: radial-gradient(ellipse at center, rgba(6, 9, 24, 0.55), rgba(0, 0, 0, 0.92) 75%);
+  opacity: 0;
+}
+#cine .cine-end .mark {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff, #9fdcff 30%, #3b6cff 62%, transparent 64%);
+  box-shadow: 0 0 60px rgba(127, 190, 255, 0.8), 0 0 140px rgba(90, 120, 255, 0.5);
+}
+#cine .cine-end h1 {
+  margin: 0;
+  font: 700 clamp(44px, 7vw, 120px) / 1 var(--cine-font);
+  letter-spacing: 0.22em;
+  padding-left: 0.22em;
+  color: #fff;
+  text-shadow: 0 0 40px rgba(127, 190, 255, 0.55);
+}
+#cine .cine-end p {
+  margin: 22px 0 0;
+  font: 500 clamp(16px, 1.7vw, 28px) var(--cine-font);
+  letter-spacing: 0.06em;
+  color: #dfe6ff;
+}
+#cine .cine-end code {
+  display: inline-block;
+  margin-top: 26px;
+  padding: 10px 22px;
+  border: 1px solid rgba(255, 207, 135, 0.5);
+  border-radius: 999px;
+  font: 500 clamp(14px, 1.3vw, 22px) var(--cine-mono);
+  color: var(--cine-gold);
+  background: rgba(255, 207, 135, 0.06);
+}

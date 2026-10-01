@@ -41,18 +41,19 @@ GitHub has **180M+ developers and 630M repositories** ([Octoverse 2025](https://
 | Spaceships and props | Quaternius, Kenney | CC0 | Contributor ships, spaceports, release rockets |
 | HDRIs and textures | Poly Haven | CC0 | Blender renders |
 
-## Status (2026-09-30)
+## Status (2026-10-01)
 
 | Piece | State | Where |
 |---|---|---|
-| Galaxy: 3,953 seeded worlds, sectors, 240 protostars, git singularity, fly-in | ✅ v0 | `src/universe/galaxyView.js`, `tools/universe/seed.mjs` |
-| Worlds: baked cube-map terrain and clouds, raymarched atmosphere, language styles, night lights and highways, civilisation by level | ✅ v0 | `src/universe/planet.js`, `planetView.js` |
-| Landing: dusk sun, descent through the clouds, arrival in the city | ✅ | `planetView.js`, `src/main.js` (`?arrive`) |
+| Galaxy: 3,959 seeded worlds, sectors, 240 protostars, git singularity, fly-in, the galaxy as of any year (`setYear`) | ✅ v0 | `src/universe/galaxyView.js`, `tools/universe/seed.mjs` |
+| Worlds: baked cube-map terrain and clouds, raymarched atmosphere, language styles, night lights (an anti-aliased street network) and highways, civilisation by level | ✅ v0 | `src/universe/planet.js`, `planetView.js` |
+| Landing: dusk sun, an arc around the world (never through it), descent through the clouds, arrival in the city | ✅ | `planetView.js`, `src/main.js` (`?arrive`) |
 | Story: prologue, Galactic Codex, levels, sectors | ✅ | `src/universe/lore.js`, `docs/LORE.md` |
 | Blender posters of worlds and cities | ✅ | `tools/blender/render_planet.py`, `render_city.py` |
-| Organisation solar systems (megastructure rings) | next | |
-| Ingest service (unknown worlds built on first visit, "add yours") | next | |
-| Live events (supernovae, release rockets, refactor asteroids) | next | |
+| Organisation star systems: a star, megastructure arcs, the flagship as a Dyson ring, member worlds | ✅ v0 | `src/universe/orgView.js`, `tools/universe/seed-orgs.mjs` |
+| Mapping service: uncharted cities surveyed on demand, with progress | ✅ v0 (runs locally and in Docker; not hosted yet) | `server/`, `src/config.js` |
+| Live events: supernovae, release rockets, asteroid impacts, galactic news | ✅ v0 | `tools/universe/events.mjs`, `src/cityEvents.js` |
+| The film, "The Big Bang of open source": director mode, frame-by-frame capture, synthesised score | ✅ | `src/universe/director.js`, `src/cityDirector.js`, `tools/video/` |
 
 Implementation notes:
 - **Terrain is baked once per world into a half-float cube map** (height in R, clouds in G), plus an equirectangular land mask read back to the CPU for placing cities. Per-frame shading then samples only textures.

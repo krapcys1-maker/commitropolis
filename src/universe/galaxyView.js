@@ -65,17 +65,27 @@ const STAR_VERTEX = /* glsl */ `
   attribute float aSize;
   attribute vec3 aColor;
   attribute float aPhase;
+  attribute float aBorn;
   uniform float uTime;
   uniform float uScale;
   uniform float uHover;
+  uniform float uYear;
   varying vec3 vColor;
   varying float vTwinkle;
   void main() {
-    vColor = aColor;
+    // a star exists from the year its account (or its region of the disk) was born, with a brief flare
+    float born = smoothstep(aBorn, aBorn + 0.35, uYear);
+    if (born <= 0.0) {
+      gl_PointSize = 0.0;
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      return;
+    }
+    float flare = 1.0 + 2.5 * born * (1.0 - born) * 4.0;
+    vColor = aColor * flare;
     vTwinkle = 0.8 + 0.2 * sin(uTime * (1.0 + aPhase * 2.0) + aPhase * 60.0);
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float boost = float(gl_VertexID) == uHover ? 2.2 : 1.0;
-    gl_PointSize = clamp(aSize * boost * uScale / -mv.z, 1.0, 96.0);
+    gl_PointSize = clamp(aSize * boost * born * flare * uScale / -mv.z, 1.0, 110.0);
     gl_Position = projectionMatrix * mv;
   }`;
 const STAR_FRAGMENT = /* glsl */ `
@@ -108,7 +118,8 @@ export class GalaxyView {
     this.sky = new Sky(this.scene, { brightness: 0.22 });
     this.disk = new THREE.Group();
     this.scene.add(this.disk);
-    this.uniforms = { uTime: { value: 0 }, uScale: { value: 600 }, uHover: { value: -1 } };
+    this.year = { value: 3000 }; // the galaxy as of this year (3000 = today, everything visible)
+    this.uniforms = { uTime: { value: 0 }, uScale: { value: 600 }, uHover: { value: -1 }, uYear: this.year };
     this.hovered = -1;
     this.built = false;
   }
@@ -143,6 +154,27 @@ export class GalaxyView {
       .slice(0, n - 1)
       .map(([a]) => a);
     return [home, ...others];
+  }
+
+  // Account creation year from its ID, interpolated between real anchors (galaxy.json ages).
+  yearOfId(id) {
+    const ages = this.data.ages ?? [[1, 1192857859], [225000000, 1754483107]];
+    let k = 1;
+    while (k < ages.length - 1 && ages[k][0] < id) k++;
+    const [i0, t0] = ages[k - 1];
+    const [i1, t1] = ages[k];
+    const t = t0 + ((id - i0) / (i1 - i0)) * (t1 - t0);
+    return Math.min(2026.8, 1970 + t / 31557600);
+  }
+
+  // The galaxy as of a given year (the film); 3000 = today.
+  setYear(year) {
+    this.year.value = year;
+    for (const p of this.puffs ?? []) {
+      const on = p.ignite ? THREE.MathUtils.smoothstep(year, p.ignite[0], p.ignite[1]) : THREE.MathUtils.smoothstep(year, p.born, p.born + 0.6);
+      p.sp.material.opacity = p.opacity * (p.ignite ? on * 1.8 : on);
+      p.sp.visible = on > 0.001;
+    }
   }
 
   sectorOf(login) {
@@ -214,6 +246,10 @@ export class GalaxyView {
 
   #updateSupernovae(time) {
     if (!this.novae?.length) return;
+    // the protostars are this year's: before they're born (the film), there's nothing to explode
+    const on = this.year.value > 2025.6;
+    this.flare.visible = this.shell.visible = this.novaLabel.visible = on;
+    if (!on) return;
     const period = 5;
     const k = Math.floor(time / period) % this.novae.length;
     const phase = (time % period) / period;
@@ -239,6 +275,7 @@ export class GalaxyView {
     const col = new Float32Array(n * 3);
     const size = new Float32Array(n);
     const phase = new Float32Array(n);
+    const born = new Float32Array(n);
     const c = new THREE.Color();
     const core = new THREE.Color('#ffd7a0');
     for (let i = 0; i < n; i++) {
@@ -265,13 +302,15 @@ export class GalaxyView {
       col.set([c.r, c.g, c.b], i * 3);
       size[i] = 1.5 + rand() * 3.5;
       phase[i] = rand();
+      born[i] = 2007.6 + Math.pow(Math.hypot(x, z) / RG, 1.15) * 18.6 + rand() * 0.4; // the disk grows outward
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
     geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
     geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-    this.dust = new THREE.Points(geo, starMaterial({ uTime: this.uniforms.uTime, uScale: this.uniforms.uScale, uHover: { value: -1 } }));
+    geo.setAttribute('aBorn', new THREE.BufferAttribute(born, 1));
+    this.dust = new THREE.Points(geo, starMaterial({ uTime: this.uniforms.uTime, uScale: this.uniforms.uScale, uHover: { value: -1 }, uYear: this.year }));
     this.disk.add(this.dust);
 
     // haze: soft sprites along the arms and inside the named nebulae
@@ -281,11 +320,13 @@ export class GalaxyView {
       [1, 'rgba(255,255,255,0)'],
     ]);
     const haze = new THREE.Group();
-    const addPuff = (x, y, z, s, color, opacity) => {
+    this.puffs = [];
+    const addPuff = (x, y, z, s, color, opacity, born = 2007.6 + Math.pow(Math.hypot(x, z) / RG, 1.15) * 18.6, ignite = null) => {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
       sp.position.set(x, y, z);
       sp.scale.setScalar(s);
       haze.add(sp);
+      this.puffs.push({ sp, opacity, born, ignite });
     };
     for (let i = 0; i < 900; i++) {
       const arm = i % ARMS;
@@ -293,13 +334,14 @@ export class GalaxyView {
       const a = armAngle(arm, r) + gauss(rand) * 0.12;
       addPuff(Math.cos(a) * r, gauss(rand) * 6, Math.sin(a) * r, 60 + rand() * 140, new THREE.Color(langColor(ARM_LANGS[arm])).lerp(new THREE.Color('#9fb3ff'), 0.5), 0.018 + rand() * 0.025);
     }
-    addPuff(0, 0, 0, RG * 0.5, new THREE.Color('#ffc07a'), 0.28);
+    addPuff(0, 0, 0, RG * 0.5, new THREE.Color('#ffc07a'), 0.28, 2007.5);
     for (const key of ['ai', 'nursery']) {
       const reg = REGIONS[key];
       const cx = Math.cos(reg.angle) * RG * reg.r;
       const cz = Math.sin(reg.angle) * RG * reg.r;
       for (let i = 0; i < 70; i++) {
-        addPuff(cx + gauss(rand) * RG * reg.spread, gauss(rand) * 10, cz + gauss(rand) * RG * reg.spread, 90 + rand() * 200, new THREE.Color(reg.color), 0.04 + rand() * 0.05);
+        // the AI Nebula ignites with the LLM wave (2022-2025); the Nursery holds this year's protostars
+        addPuff(cx + gauss(rand) * RG * reg.spread, gauss(rand) * 10, cz + gauss(rand) * RG * reg.spread, 90 + rand() * 200, new THREE.Color(reg.color), 0.04 + rand() * 0.05, 0, key === 'ai' ? [2022.6, 2024.8] : [2025.2, 2026.2]);
       }
     }
     // dark dust lanes on the inner edge of each arm, for contrast
@@ -324,8 +366,10 @@ export class GalaxyView {
     const col = new Float32Array(n * 3);
     const size = new Float32Array(n);
     const phase = new Float32Array(n);
+    const born = new Float32Array(n);
     const c = new THREE.Color();
     accounts.forEach((a, i) => {
+      born[i] = this.yearOfId(a.i);
       const rand = rng(hashString(`${a.l}:look`));
       const p = this.worldPos[i];
       pos.set([p.x, p.y, p.z], i * 3);
@@ -340,6 +384,7 @@ export class GalaxyView {
     geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
     geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
     geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+    geo.setAttribute('aBorn', new THREE.BufferAttribute(born, 1));
     this.worlds = new THREE.Points(geo, starMaterial(this.uniforms));
     this.disk.add(this.worlds);
   }
@@ -351,6 +396,7 @@ export class GalaxyView {
     const col = new Float32Array(list.length * 3);
     const size = new Float32Array(list.length);
     const phase = new Float32Array(list.length);
+    const born = new Float32Array(list.length);
     this.protoPos = [];
     list.forEach((p, i) => {
       const rand = rng(hashString(p.r));
@@ -362,13 +408,15 @@ export class GalaxyView {
       col.set([2.4, 1.2, 1.7], i * 3);
       size[i] = 6 + Math.log10(1 + p.s) * 5;
       phase[i] = rand();
+      born[i] = 1970 + p.c / 31557600;
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
     geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
     geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-    this.protostars = new THREE.Points(geo, starMaterial({ uTime: this.uniforms.uTime, uScale: this.uniforms.uScale, uHover: { value: -1 } }));
+    geo.setAttribute('aBorn', new THREE.BufferAttribute(born, 1));
+    this.protostars = new THREE.Points(geo, starMaterial({ uTime: this.uniforms.uTime, uScale: this.uniforms.uScale, uHover: { value: -1 }, uYear: this.year }));
     this.disk.add(this.protostars);
   }
 
