@@ -1,0 +1,16 @@
+name: Idea for the universe
+description: Something the Commitverse could show, measure or do
+labels: [idea]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like to see?
+      description: For example a phenomenon, a new galaxy, a way to travel or something to share.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: What would it measure?
+      description: Every visual rule here is a measurement. Which public git or GitHub data would drive it?

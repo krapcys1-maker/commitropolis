@@ -58,6 +58,11 @@ GitHub has **180M+ developers and 630M repositories** ([Octoverse 2025](https://
 | One continuous zoom from the cluster to a line (scale ladder, push past a scale's limit) | ✅ | `src/scale.js`, every view's `zoomTarget()` |
 | A city for any public repository, raised live from the GitHub API (4 requests) | ✅ | `src/liveCity.js` |
 | A living universe: daily reseed, migration log, joining by star | ✅ v0 | `tools/universe/seed.mjs`, `.github/workflows/universe.yml` |
+| Living details: night traffic, aurorae by activity, contributor fleets, a cosmic web, a warp between scales | ✅ | `src/traffic.js`, `planet.js`, `universeView.js`, `materials.js` (FinishShader `uWarp`) |
+| A time machine in every galaxy; an autopilot from the cluster to any world (`?home=`) | ✅ | `galaxyView.js`, `src/universe/main.js` |
+| World cards for READMEs (animated SVG, a GitHub Action) and a share panel | ✅ | `src/card.js`, `card/`, `src/universe/share.js` |
+| A film of any city, recorded in the browser with its soundtrack | ✅ | `src/recorder.js`, `src/cityDirector.js`, `public/media/city-film.mp3` |
+| Live ambient sound (WebAudio) | ✅ | `src/sound.js` |
 
 Implementation notes:
 - **Terrain is baked once per world into a half-float cube map** (height in R, clouds in G), plus an equirectangular land mask read back to the CPU for placing cities. Per-frame shading then samples only textures.
