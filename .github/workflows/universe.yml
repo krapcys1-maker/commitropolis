@@ -32,12 +32,18 @@ jobs:
         run: node tools/universe/seed.mjs
       - name: Regenerate the news
         run: node tools/universe/events.mjs
+      # the README's example card, drawn by the same action anyone can use (card/action.yml)
+      - name: Redraw the README card
+        uses: ./card
+        with:
+          login: karpathy
+          output: docs/img/card-karpathy.svg
       - name: Commit if anything moved
         id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/universe
+          git add public/universe docs/img/card-karpathy.svg
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
