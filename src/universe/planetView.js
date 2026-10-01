@@ -34,6 +34,15 @@ export async function loadPlanet(login) {
   };
 }
 
+let newsPromise = null;
+export function loadNews() {
+  newsPromise ??= fetch('universe/events.json')
+    .then((r) => ((r.headers.get('content-type') ?? '').includes('json') ? r.json() : { events: [] }))
+    .then((j) => j.events)
+    .catch(() => []);
+  return newsPromise;
+}
+
 let cityIndexPromise = null;
 export function loadCityIndex() {
   cityIndexPromise ??= fetch('data/index.json')
@@ -63,6 +72,10 @@ export class PlanetView {
     this.planet = new Planet(this.ctx.renderer, data, index);
     this.scene.add(this.planet.frame);
     this.#buildLabels();
+    // real releases of this world's cities become its rocket launches
+    const news = await loadNews();
+    const mine = news.filter((e) => e.type === 'launch' && e.repo.split('/')[0].toLowerCase() === data.login.toLowerCase());
+    this.planet.setLaunches(mine.map((e) => ({ city: this.planet.cities.findIndex((c) => c.repo.n === e.repo.split('/')[1]), name: e.repo.split('/')[1], tag: e.tag })));
 
     camera.near = 0.5;
     camera.far = 20000;

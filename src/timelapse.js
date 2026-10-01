@@ -45,6 +45,7 @@ export class Timelapse {
     this.city.loc.set(this.target);
     this.city.update();
     this.onCommit(this.currentCommit);
+    this.onSeek?.(this.currentCommit?.t ?? 0);
   }
 
   // Advance by a wall-clock (or fixed, for video capture) time step.
@@ -54,7 +55,9 @@ export class Timelapse {
     this.acc += dt * perSecond;
     let applied = false;
     while (this.acc >= 1 && this.cursor < this.commits.length) {
-      this.#apply(this.commits[this.cursor++], true);
+      const index = this.cursor++;
+      this.#apply(this.commits[index], true);
+      this.onApply?.(index, this.commits[index]);
       this.acc -= 1;
       applied = true;
     }

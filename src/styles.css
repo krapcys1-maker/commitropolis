@@ -239,3 +239,34 @@ button.primary {
 }
 #arrival.on { opacity: 1; }
 #arrival.on.clear { opacity: 0; transition: opacity 2.2s ease; }
+
+#caption {
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  transform: translate(-50%, -6px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(8, 12, 22, 0.8);
+  border: 1px solid rgba(255, 190, 110, 0.4);
+  color: #ffe3b8;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  z-index: 6;
+}
+#caption.show { opacity: 1; transform: translate(-50%, 0); }
+.rocket-label {
+  color: #fff;
+  font: 600 12px ui-monospace, Consolas, monospace;
+  background: rgba(255, 140, 50, 0.85);
+  border-radius: 6px;
+  padding: 2px 6px;
+  box-shadow: 0 0 14px rgba(255, 150, 60, 0.8);
+  white-space: nowrap;
+}

@@ -13,6 +13,7 @@ import { FinishShader } from './materials.js';
 import { CodeReader } from './reader.js';
 import { search } from './search.js';
 import { fetchCity } from './config.js';
+import { CityEvents } from './cityEvents.js';
 
 const $ = (id) => document.getElementById(id);
 const W = () => Math.max(1, innerWidth);
@@ -81,6 +82,17 @@ let timelapse = null;
 let selected = -1;
 let flight = null;
 let elevator = null; // camera ride along a building's facade while its code is open
+let events = null; // rockets and asteroid impacts in the timelapse
+let shake = null;
+let captionTimer = 0;
+
+function showCaption(text) {
+  const el = $('caption');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(captionTimer);
+  captionTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
 
 const fmtDate = (t) => new Date(t * 1000).toISOString().slice(0, 10);
 const fmtNum = (n) => Math.round(n).toLocaleString('en-US');
@@ -128,6 +140,9 @@ async function load(slug, focus) {
   scene.add(city.group);
   timelapse = new Timelapse(city);
   timelapse.onCommit = showCommit;
+  events = new CityEvents(city, { caption: showCaption, shake: (amp, dur) => (shake = { amp, dur, t: dur }) });
+  timelapse.onApply = (i, c) => events.onCommit(i, c);
+  timelapse.onSeek = (t) => events.reset(t);
   selected = -1;
   $('info').hidden = true;
 
@@ -450,7 +465,17 @@ function stepFrame(dt) {
   if (elevator) updateElevator(dt);
   else controls.update();
   atmosphere.follow(camera);
+  events?.update(dt);
+  const jolt = new THREE.Vector3();
+  if (shake) {
+    shake.t -= dt;
+    const a = shake.amp * Math.max(0, shake.t / shake.dur);
+    jolt.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a);
+    if (shake.t <= 0) shake = null;
+  }
+  camera.position.add(jolt);
   composer.render();
+  camera.position.sub(jolt);
   fadeLabels();
   labelRenderer.render(scene, camera);
 }

@@ -118,6 +118,10 @@ export class GalaxyView {
     this.data = await this.dataPromise;
     this.byLogin ??= new Map(this.data.accounts.map((a, i) => [a.l.toLowerCase(), i]));
     this.worldPos ??= placeWorlds(this.data.accounts);
+    this.newsPromise ??= fetch('universe/events.json')
+      .then((r) => ((r.headers.get('content-type') ?? '').includes('json') ? r.json() : { events: [] }))
+      .catch(() => ({ events: [] }));
+    this.news = (await this.newsPromise).events;
     return this.data;
   }
 
@@ -178,6 +182,53 @@ export class GalaxyView {
     this.#buildNursery();
     this.#buildSingularity();
     this.#buildLabels();
+    this.#buildSupernovae();
+  }
+
+  // The fastest-rising protostars flare up one after another: supernovae (tools/universe/events.mjs).
+  #buildSupernovae() {
+    const tex = radialTexture([
+      [0, 'rgba(255,255,255,1)'],
+      [0.12, 'rgba(255,220,240,0.9)'],
+      [0.35, 'rgba(255,120,180,0.25)'],
+      [1, 'rgba(255,80,160,0)'],
+    ]);
+    const ringTex = radialTexture([
+      [0, 'rgba(255,255,255,0)'],
+      [0.82, 'rgba(255,255,255,0)'],
+      [0.9, 'rgba(255,190,230,0.8)'],
+      [1, 'rgba(255,190,230,0)'],
+    ]);
+    this.flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(2.6, 1.6, 2.2), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+    this.shell = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, color: new THREE.Color(2, 1.3, 1.8), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+    const el = document.createElement('div');
+    el.className = 'nova-label';
+    this.novaLabel = new CSS2DObject(el);
+    this.disk.add(this.flare, this.shell, this.novaLabel);
+    this.novae = this.news
+      .filter((e) => e.type === 'supernova')
+      .map((e) => ({ e, i: this.data.nursery.findIndex((p) => p.r === e.repo) }))
+      .filter((n) => n.i >= 0)
+      .slice(0, 8);
+  }
+
+  #updateSupernovae(time) {
+    if (!this.novae?.length) return;
+    const period = 5;
+    const k = Math.floor(time / period) % this.novae.length;
+    const phase = (time % period) / period;
+    const nova = this.novae[k];
+    const at = this.protoPos[nova.i];
+    this.flare.position.copy(at);
+    this.shell.position.copy(at);
+    this.novaLabel.position.copy(at).add(new THREE.Vector3(0, 18, 0));
+    const burst = Math.exp(-phase * 6);
+    this.flare.material.opacity = Math.min(1, burst * 1.4);
+    this.flare.scale.setScalar(20 + burst * 90);
+    this.shell.material.opacity = Math.max(0, 0.8 - phase);
+    this.shell.scale.setScalar(20 + phase * 160);
+    this.novaLabel.element.textContent = phase < 0.75 ? `✷ ${nova.e.repo}` : '';
+    this.novaLabel.element.style.opacity = phase < 0.75 ? 1 : 0;
   }
 
   // ~120k unnamed stars: bulge + 8 language arms + nebula haze for the named regions.
@@ -433,12 +484,28 @@ export class GalaxyView {
       <div class="chips">${showcase}</div>
       <h4>${s ? 'Brightest worlds here' : 'Brightest worlds'}</h4>
       <ul class="cities">${worlds}</ul>
-      ${!sectorKey || sectorKey === 'nursery' ? `<h4>Rising in the Stellar Nursery</h4><ul class="cities">${protos}</ul>` : ''}`;
+      ${!sectorKey || sectorKey === 'nursery' ? `<h4>Rising in the Stellar Nursery</h4><ul class="cities">${protos}</ul>` : ''}
+      ${!sectorKey ? `<h4>Galactic news</h4><ul class="news">${this.#newsHtml()}</ul>` : ''}`;
+  }
+
+  #newsHtml() {
+    const icon = { supernova: '✷', launch: '🚀', impact: '☄' };
+    const pick = [...this.news.filter((e) => e.type === 'supernova').slice(0, 3), ...this.news.filter((e) => e.type !== 'supernova').slice(0, 7)].sort((a, b) => b.t - a.t);
+    return pick
+      .map((e, k) => `<li data-news="${this.news.indexOf(e)}"><span class="ni">${icon[e.type]}</span><span><b>${e.title}</b><small>${e.detail} · ${new Date(e.t * 1000).toISOString().slice(0, 10)}</small></span></li>`)
+      .join('');
   }
 
   #wireCard() {
     this.ctx.ui.cardEl.querySelectorAll('[data-login]').forEach((el) => {
       el.onclick = () => this.visit(el.dataset.login);
+    });
+    this.ctx.ui.cardEl.querySelectorAll('[data-news]').forEach((el) => {
+      const e = this.news[Number(el.dataset.news)];
+      el.onclick = () => {
+        if (e.target.city) location.href = `city.html?repo=${encodeURIComponent(e.target.city)}&from=${encodeURIComponent(e.target.from)}`;
+        else this.visit(e.target.planet);
+      };
     });
   }
 
@@ -513,6 +580,7 @@ export class GalaxyView {
     this.uniforms.uScale.value = innerHeight * 0.9;
     this.disk.rotation.y += dt * 0.004;
     this.singularity.rotation.y += dt * 0.25;
+    this.#updateSupernovae(time);
     this.sky.update(this.ctx.camera, new THREE.Vector3(0, 1, 0));
     const f = this.flying;
     if (f) {

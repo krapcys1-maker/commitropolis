@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { NOISE, TERRAIN, ATMOSPHERE } from './glsl.js';
 import { levelOf, langColor, hashString, rng, cityTier, worldStyle } from './lore.js';
 
@@ -573,15 +574,27 @@ export class Planet {
       }
     }
 
-    // rockets: every release lifts off the biggest city (levels 4+)
-    this.rockets = [];
-    if (lv >= 4 && this.cities[0]) {
-      const trailGeo = new THREE.BufferGeometry();
-      trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
-      const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: new THREE.Color(3, 1.8, 0.8), transparent: true, opacity: 0.9 }));
-      this.group.add(trail);
-      this.rocket = { trail, t: -rand() * 8, every: 14 };
-    }
+    // rockets: industrial worlds launch from their biggest city; real releases replace this (setLaunches)
+    if (lv >= 4 && this.cities[0]) this.#makeRocket(rand() * 8);
+    this.launches = [];
+  }
+
+  #makeRocket(delay = 0) {
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
+    const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: new THREE.Color(3, 1.8, 0.8), transparent: true, opacity: 0.9 }));
+    this.group.add(trail);
+    const el = document.createElement('div');
+    el.className = 'rocket-label';
+    const label = new CSS2DObject(el);
+    this.group.add(label);
+    this.rocket = { trail, label, t: -delay, every: 12, n: 0 };
+  }
+
+  // Real release tags of this world's cities (tools/universe/events.mjs): each lifts off its own city.
+  setLaunches(launches) {
+    this.launches = launches.filter((l) => l.city >= 0);
+    if (this.launches.length && !this.rocket) this.#makeRocket(2);
   }
 
   // City under a world-space ray, if any: analytic sphere hit, then nearest city within its radius.
@@ -642,9 +655,13 @@ export class Planet {
     if (this.rocket) {
       const r = this.rocket;
       r.t += dt;
-      if (r.t > r.every) r.t = 0;
+      if (r.t > r.every) {
+        r.t = 0;
+        r.n++;
+      }
+      const launch = this.launches.length ? this.launches[r.n % this.launches.length] : null;
       const pos = r.trail.geometry.attributes.position;
-      const start = this.cities[0].dir.clone();
+      const start = this.cities[launch ? launch.city : 0].dir.clone();
       const side = new THREE.Vector3(0, 1, 0).cross(start).normalize();
       const k = Math.min(1, Math.max(0, r.t / 6));
       for (let i = 0; i < 64; i++) {
@@ -654,7 +671,11 @@ export class Planet {
         pos.setXYZ(i, dir.x * alt, dir.y * alt, dir.z * alt);
       }
       pos.needsUpdate = true;
-      r.trail.material.opacity = k > 0 && k < 1 ? 0.95 * (1 - k * 0.6) : 0;
+      const visible = k > 0 && k < 1;
+      r.trail.material.opacity = visible ? 0.95 * (1 - k * 0.6) : 0;
+      r.label.position.set(pos.getX(0), pos.getY(0), pos.getZ(0));
+      r.label.element.textContent = launch ? `${launch.name} ${launch.tag}` : '';
+      r.label.element.style.opacity = visible && launch ? 1 : 0;
     }
   }
 
