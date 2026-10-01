@@ -88,6 +88,28 @@ const ui = {
     $('loading').hidden = !text;
     if (text) $('loading').textContent = text;
   },
+  // progress of a city survey by the mapping service
+  survey(repo, step, position) {
+    const el = $('survey');
+    if (!repo) {
+      el.hidden = true;
+      return;
+    }
+    const steps = [
+      ['clone', 'Cloning the repository'],
+      ['scan', 'Measuring every file'],
+      ['history', 'Reading the whole history'],
+      ['layout', 'Laying out districts'],
+      ['write', 'Raising the buildings'],
+    ];
+    const order = ['queued', ...steps.map((s) => s[0]), 'done'];
+    const at = order.indexOf(step);
+    el.innerHTML = `<div class="survey-title">Surveying <b>${repo}</b></div>
+      ${step === 'queued' && position ? `<div class="survey-note">In the queue: #${position}</div>` : ''}
+      <ol>${steps.map(([key, label], k) => `<li class="${at > k + 1 ? 'ok' : at === k + 1 ? 'now' : ''}">${label}</li>`).join('')}</ol>
+      ${step === 'done' ? '<div class="survey-note">Mapped. Landing…</div>' : ''}`;
+    el.hidden = false;
+  },
 };
 
 const ctx = { renderer, camera, controls, ui, composer };

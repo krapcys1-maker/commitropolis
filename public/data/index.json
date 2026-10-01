@@ -90,12 +90,6 @@
     "commits": 729
   },
   {
-    "slug": "tj-commander.js",
-    "name": "tj/commander.js",
-    "files": 218,
-    "commits": 1111
-  },
-  {
     "slug": "tj-n",
     "name": "tj/n",
     "files": 41,
@@ -106,12 +100,6 @@
     "name": "tj/co",
     "files": 19,
     "commits": 230
-  },
-  {
-    "slug": "antirez-kilo",
-    "name": "antirez/kilo",
-    "files": 6,
-    "commits": 16
   },
   {
     "slug": "antirez-smallchat",
@@ -202,5 +190,17 @@
     "name": "yyx990803/pod",
     "files": 27,
     "commits": 304
+  },
+  {
+    "slug": "antirez-kilo",
+    "name": "antirez/kilo",
+    "files": 6,
+    "commits": 16
+  },
+  {
+    "slug": "tj-commander.js",
+    "name": "tj/commander.js",
+    "files": 218,
+    "commits": 1111
   }
 ]

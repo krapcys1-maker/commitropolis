@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Planet, R } from './planet.js';
 import { Sky } from './sky.js';
 import { langColor, cityTier } from './lore.js';
+import { apiBase, mapCity } from '../config.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
@@ -178,7 +179,7 @@ export class PlanetView {
       return;
     }
     const c = this.planet.cities[i];
-    tip.innerHTML = `<b>${c.repo.n}</b> · ${c.tier}<br>${fmt(c.repo.s)} ★ · ${c.repo.lang ?? 'n/a'}${c.repo.d ? `<br><span class="desc">${c.repo.d}</span>` : ''}<br><em>${c.slug ? 'Click to land' : 'Uncharted: not mapped yet'}</em>`;
+    tip.innerHTML = `<b>${c.repo.n}</b> · ${c.tier}<br>${fmt(c.repo.s)} ★ · ${c.repo.lang ?? 'n/a'}${c.repo.d ? `<br><span class="desc">${c.repo.d}</span>` : ''}<br><em>${c.slug ? 'Click to land' : 'Uncharted: click to survey it'}</em>`;
     tip.style.left = `${Math.min(event.clientX + 16, innerWidth - 320)}px`;
     tip.style.top = `${event.clientY + 16}px`;
     tip.hidden = false;
@@ -195,7 +196,7 @@ export class PlanetView {
     const city = this.planet.cities[i];
     const { ui, camera, controls } = this.ctx;
     if (!city.slug) {
-      ui.toast(`<b>${city.repo.n}</b> is uncharted: its history hasn't been mapped yet. <a href="https://github.com/${this.data.login}/${city.repo.n}" target="_blank" rel="noopener">View on GitHub ↗</a>`);
+      this.#survey(i);
       return;
     }
     controls.enabled = false;
@@ -215,6 +216,33 @@ export class PlanetView {
       sunTo: normal.clone().multiplyScalar(-0.12).add(tangent).normalize(),
     };
     ui.hint(`Descending to ${city.repo.n}…`);
+  }
+
+  // An uncharted city: ask the mapping service to survey it, show progress, then land.
+  async #survey(i) {
+    const city = this.planet.cities[i];
+    const { ui } = this.ctx;
+    const repo = `${this.data.login}/${city.repo.n}`;
+    if (!(await apiBase())) {
+      ui.toast(`<b>${city.repo.n}</b> is uncharted: its history hasn't been mapped yet. <a href="https://github.com/${repo}" target="_blank" rel="noopener">View on GitHub ↗</a>`);
+      return;
+    }
+    if (this.surveying) return;
+    this.surveying = true;
+    ui.survey(repo, 'queued');
+    try {
+      city.slug = await mapCity(repo, (job) => ui.survey(repo, job.step, job.position));
+      ui.survey(repo, 'done');
+      setTimeout(() => {
+        ui.survey(null);
+        this.land(i);
+      }, 700);
+    } catch (err) {
+      ui.survey(null);
+      ui.toast(`Couldn't map <b>${city.repo.n}</b>: ${err.message}`);
+    } finally {
+      this.surveying = false;
+    }
   }
 
   #updateLanding(dt) {

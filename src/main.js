@@ -12,6 +12,7 @@ import { Atmosphere } from './atmosphere.js';
 import { FinishShader } from './materials.js';
 import { CodeReader } from './reader.js';
 import { search } from './search.js';
+import { fetchCity } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const W = () => Math.max(1, innerWidth);
@@ -104,6 +105,8 @@ async function loadIndex() {
     $('loading').textContent = 'No city data yet. Run: npm run ingest -- <github-url>';
     return;
   }
+  // a city mapped by the service isn't in the shipped index: list it anyway
+  if (!index.some((e) => e.slug === slug)) select.insertAdjacentHTML('afterbegin', `<option value="${slug}">${slug.replace('-', '/')}</option>`);
   select.value = slug;
   await load(slug, params.get('focus'));
 }
@@ -111,7 +114,7 @@ async function loadIndex() {
 async function load(slug, focus) {
   $('loading').hidden = false;
   exitBuilding();
-  data = await fetch(`data/${slug}.json`).then((r) => r.json());
+  data = await fetchCity(slug);
   if (city) {
     scene.remove(city.group);
     city.group.traverse((o) => {

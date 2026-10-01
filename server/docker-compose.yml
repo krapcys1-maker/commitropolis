@@ -1,0 +1,31 @@
+# docker compose -f server/docker-compose.yml up -d --build
+# Optional HTTPS: set DOMAIN (DNS A record pointing here) and uncomment the caddy service.
+services:
+  mapper:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-https://krapcys1-maker.github.io}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      MAX_REPO_MB: ${MAX_REPO_MB:-400}
+      CONCURRENCY: ${CONCURRENCY:-1}
+    volumes:
+      - mapper-data:/data
+    ports:
+      - "8787:8787"
+
+  # caddy:
+  #   image: caddy:2
+  #   restart: unless-stopped
+  #   command: caddy reverse-proxy --from ${DOMAIN} --to mapper:8787
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - caddy-data:/data
+
+volumes:
+  mapper-data:
+  # caddy-data:

@@ -6,6 +6,7 @@
 //   npm run ingest -- ../some/local/repo
 //
 // Output: public/data/<slug>.json + an updated public/data/index.json
+// Service mode (server/server.mjs): --out <dir> --cache <dir> --progress (JSON lines on stdout) --clean
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +22,12 @@ const opt = (name, fallback) => {
   return i >= 0 ? args[i + 1] : fallback;
 };
 const outDir = opt('--out', 'public/data');
+const cacheDir = opt('--cache', '.cache/repos');
+const PROGRESS = args.includes('--progress');
+const CLEAN = args.includes('--clean');
+// --progress: machine-readable steps on stdout, human messages on stderr
+const log = PROGRESS ? (m) => process.stderr.write(`${m}\n`) : (m) => console.log(m);
+const step = (name, extra = {}) => PROGRESS && process.stdout.write(`${JSON.stringify({ step: name, ...extra })}\n`);
 
 const IGNORE = [
   /(^|\/)(node_modules|vendor|third_party|dist|build)\//,
@@ -44,14 +51,15 @@ function resolveRepo(src) {
   const [owner, repo] = [m[1], m[2]];
   const url = `https://github.com/${owner}/${repo}`;
   const slug = `${owner}-${repo}`.toLowerCase();
-  const dir = path.resolve('.cache/repos', slug);
+  const dir = path.resolve(cacheDir, slug);
   if (fs.existsSync(path.join(dir, '.git'))) {
-    console.log(`Updating ${dir}`);
+    log(`Updating ${dir}`);
     git(dir, 'pull', '--ff-only', '-q');
   } else {
     fs.mkdirSync(path.dirname(dir), { recursive: true });
-    console.log(`Cloning ${url}`);
-    execFileSync('git', ['clone', '-q', '--single-branch', `${url}.git`, dir], { stdio: 'inherit' });
+    log(`Cloning ${url}`);
+    step('clone');
+    execFileSync('git', ['clone', '-q', '--single-branch', `${url}.git`, dir], { stdio: PROGRESS ? ['ignore', 'ignore', 'pipe'] : 'inherit' });
   }
   return { dir, slug, name: `${owner}/${repo}`, url };
 }
@@ -85,6 +93,7 @@ const repo = resolveRepo(args[0]);
 const head = git(repo.dir, 'rev-parse', 'HEAD').trim();
 
 // 1. Final state: every tracked text file and its line count.
+step('scan');
 const buildings = [];
 for (const p of git(repo.dir, 'ls-files', '-z').split('\0')) {
   if (!p || ignored(p)) continue;
@@ -92,7 +101,8 @@ for (const p of git(repo.dir, 'ls-files', '-z').split('\0')) {
   if (loc === null) continue;
   buildings.push({ p, loc, alive: true });
 }
-console.log(`${buildings.length} files at HEAD`);
+log(`${buildings.length} files at HEAD`);
+step('history', { files: buildings.length });
 
 // 2. History, newest -> oldest. Each building is a file IDENTITY: renames are followed back
 // so a file's whole life lands on one building, and files that were later deleted get
@@ -169,7 +179,8 @@ for (const commit of commits) {
   commit.c = c;
 }
 const alive = kept.filter((b) => b.alive).length;
-console.log(`${commits.length} commits, ${alive} standing buildings, ${kept.length - alive} demolished`);
+log(`${commits.length} commits, ${alive} standing buildings, ${kept.length - alive} demolished`);
+step('layout', { commits: commits.length, buildings: kept.length });
 
 // 4. One layout for every building that ever existed, sized by peak, so nothing moves in the timelapse.
 const layout = layoutCity(buildTree(kept.map((b) => ({ p: b.p, loc: b.peak }))), kept.length);
@@ -186,6 +197,29 @@ const files = kept.map((b, i) => ({
   ...layout.files[i],
 }));
 
+// 5. Events for the universe: release tags (rockets) and the biggest deletions (asteroid impacts).
+const tagLines = git(repo.dir, 'for-each-ref', '--sort=-creatordate', '--format=%(refname:short)%09%(creatordate:unix)', 'refs/tags')
+  .split('\n')
+  .filter(Boolean)
+  .slice(0, 300)
+  .map((l) => l.split('\t'))
+  .map(([name, t]) => [name, Number(t)])
+  .filter(([, t]) => t > 0);
+const kept_commits = commits.filter((c) => c.c.length);
+const impacts = kept_commits
+  .map((c, i) => {
+    let added = 0;
+    let deleted = 0;
+    for (let k = 0; k < c.c.length; k += 3) {
+      added += c.c[k + 1];
+      deleted += c.c[k + 2];
+    }
+    return { i, h: c.h, t: c.t, s: c.s, added, deleted };
+  })
+  .filter((x) => x.deleted >= 200 && x.deleted > x.added * 2)
+  .sort((a, b) => b.deleted - a.deleted)
+  .slice(0, 6);
+
 const data = {
   version: 1,
   repo: { name: repo.name, url: repo.url, head, generatedAt: new Date().toISOString() },
@@ -193,9 +227,11 @@ const data = {
   districts: layout.districts,
   files,
   authors,
-  commits: commits.filter((c) => c.c.length),
+  commits: kept_commits,
+  events: { tags: tagLines, impacts },
 };
 
+step('write');
 fs.mkdirSync(outDir, { recursive: true });
 const outFile = path.join(outDir, `${repo.slug}.json`);
 fs.writeFileSync(outFile, JSON.stringify(data));
@@ -205,4 +241,6 @@ const list = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, 'u
 const entry = { slug: repo.slug, name: repo.name, files: alive, commits: data.commits.length };
 fs.writeFileSync(indexFile, JSON.stringify([...list.filter((e) => e.slug !== repo.slug), entry], null, 2));
 
-console.log(`Wrote ${outFile} (${(fs.statSync(outFile).size / 1024).toFixed(0)} KB)`);
+log(`Wrote ${outFile} (${(fs.statSync(outFile).size / 1024).toFixed(0)} KB)`);
+if (CLEAN && repo.url) fs.rmSync(repo.dir, { recursive: true, force: true });
+step('done', { slug: repo.slug, files: alive, commits: data.commits.length, kb: Math.round(fs.statSync(outFile).size / 1024) });
