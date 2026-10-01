@@ -49,7 +49,11 @@ jobs:
             exit 0
           fi
           git commit -m "Universe: daily refresh $(date -u +%F)"
-          git push
+          # someone may have pushed while the seed ran (it takes half an hour): rebase onto it and retry
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && break
+            sleep 10
+          done
           echo "changed=true" >> "$GITHUB_OUTPUT"
       # a push made with GITHUB_TOKEN doesn't start other workflows, so ask for the deploy directly
       - name: Redeploy the site
