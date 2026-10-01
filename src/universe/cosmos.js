@@ -63,10 +63,13 @@ export function loadCosmos() {
     ];
     // recent journeys between galaxies, drawn as comets in the cluster (universeView.js)
     const month = Date.now() / 1000 - 45 * 86400;
+    // the brightest moves first: ignitions, then big worlds changing galaxy (small moves stay in the news)
     const journeys = [
-      ...logged.filter((m) => m.from && m.to && m.from !== m.to && m.t > month).map((m) => ({ from: m.from, to: m.to, label: m.repo ?? `@${m.login}`, stars: m.s, login: m.login })),
-      ...promoted.filter((a) => !ignited.has(a.promoted.repo)).map((a) => ({ from: 'rising', to: 'titan', label: a.promoted.repo, stars: a.promoted.stars, login: a.l })),
-    ].slice(0, 12);
+      ...logged.filter((m) => m.from && m.to && m.from !== m.to && m.t > month && (m.type === 'ignition' || m.s >= 20000)).map((m) => ({ from: m.from, to: m.to, label: m.repo ?? `@${m.login}`, stars: m.s, login: m.login, ignition: m.type === 'ignition' })),
+      ...promoted.filter((a) => !ignited.has(a.promoted.repo)).map((a) => ({ from: 'rising', to: 'titan', label: a.promoted.repo, stars: a.promoted.stars, login: a.l, ignition: true })),
+    ]
+      .sort((x, y) => (y.ignition - x.ignition) || y.stars - x.stars)
+      .slice(0, 12);
     const joined = accounts.filter((a) => a.joined);
     return { data, accounts, byLogin, members, rising, promoted, joined, journeys, news, generatedAt: data.generatedAt };
   })();

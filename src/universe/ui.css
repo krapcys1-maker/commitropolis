@@ -82,6 +82,11 @@ button:hover, .hud-btn:hover { background: rgba(255, 255, 255, 0.1); }
 #star-btn b { font: 600 12px var(--mono); color: var(--text); margin-left: 2px; }
 #star-btn b:empty { display: none; }
 
+/* the autopilot form on the universe card */
+.home-form { display: flex; gap: 8px; margin: 14px 0 6px; }
+.home-form input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 207, 135, 0.4); border-radius: 9px; padding: 8px 10px; }
+.home-form button.primary { flex: none; white-space: nowrap; color: #1a1006; font-weight: 700; background: linear-gradient(180deg, #ffe3a8, #ffb45a); border: none; box-shadow: 0 0 16px rgba(255, 180, 90, 0.4); }
+
 /* sharing a world (share.js) */
 .share-card { display: block; width: 100%; border-radius: 10px; margin: 2px 0 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
 .share-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
@@ -255,7 +260,8 @@ html.ascending #fade { opacity: 1; }
   z-index: 20;
   display: grid;
   place-items: center;
-  background: radial-gradient(ellipse at center, rgba(8, 11, 28, 0.985), #000 70%);
+  /* the universe already turns behind the words */
+  background: radial-gradient(ellipse at center, rgba(4, 6, 16, 0.62), rgba(0, 0, 0, 0.9) 75%);
   cursor: pointer;
   transition: opacity 1.2s ease;
 }

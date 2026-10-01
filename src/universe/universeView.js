@@ -377,7 +377,11 @@ export class UniverseView {
     return `
       <div class="world-name">The Commitverse</div>
       <p class="level-text">${GALAXIES.length} galaxies, ${fmt(worlds)} worlds and ${fmt(cos.rising.length)} protostars, charted from GitHub. Every star is a real account and every galaxy a kind of code. As projects grow they migrate: past ${fmt(100000)} ★ a rising project joins the Titans.</p>
-      <p class="note">Search <b>@anyone</b> to fly to their world, or <b>owner/repo</b> to land in any city.</p>
+      <form id="home-form" class="home-form">
+        <input id="home-login" type="text" placeholder="your GitHub login" autocomplete="off" spellcheck="false" aria-label="GitHub login" />
+        <button class="primary" type="submit">🚀 Fly me home</button>
+      </form>
+      <p class="note">The autopilot takes you from here to your world: into your galaxy, your star system, your planet. Or search <b>@anyone</b>, or <b>owner/repo</b> to land in any city.</p>
       <p><button id="surprise" class="chip world">🎲 Take me to a random world</button></p>
       <h4>Galaxies <small>zoom in or click</small></h4>
       <ul class="cities">${galaxies}</ul>
@@ -399,6 +403,11 @@ export class UniverseView {
       el.onmouseleave = () => this.#hover(null);
     });
     card.querySelectorAll('[data-login]').forEach((el) => (el.onclick = () => this.ctx.go({ planet: el.dataset.login })));
+    card.querySelector('#home-form').onsubmit = (e) => {
+      e.preventDefault();
+      const login = card.querySelector('#home-login').value.trim().replace(/^@/, '').replace(/^https?:\/\/github\.com\//, '').split('/')[0];
+      if (login) this.ctx.flyHome(login);
+    };
     // anywhere in the charted universe, a little more often somewhere bright
     card.querySelector('#surprise').onclick = () => {
       const all = this.cosmos.accounts;

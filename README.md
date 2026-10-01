@@ -80,6 +80,7 @@ It's one continuous zoom: **universe → galaxy → star system → world → ci
   - zoom out of a city and you rise through the clouds to its world;
   - out of a world and you reach its star system, then its galaxy, then the whole cluster;
   - zoom in and you go back down, into the galaxy, the star or the city under your cursor, and finally the building.
+- **🚀 Fly me home.** Type your GitHub login on the first card and the autopilot takes you from the whole cluster into your galaxy, your star system and your world. Share the journey: `…/commitverse/?home=<login>`.
 - **Click anything** to fly straight there.
 - **Search** `@anyone` to fly to their world, or `owner/repo` to land in that city.
 - **Turn back time.** Every galaxy has a time machine: scrub through the years, or press ▶ to watch it form from 2008 to today.

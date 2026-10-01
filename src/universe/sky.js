@@ -1,15 +1,35 @@
 import * as THREE from 'three';
 
+// The star map, shared by every view: a small version first so the sky is there at once, then the
+// full 4K map for every sky at once (one copy on the GPU, however many views are open). The 4K map is a
+// new texture rather than a bigger image in the old one: WebGL2 textures can't change size.
+const skies = new Set();
+let starmap = null;
+function starmapTexture() {
+  if (starmap) return starmap;
+  starmap = new THREE.TextureLoader().load('universe/starmap_1k.webp', () => {
+    new THREE.TextureLoader().load('universe/starmap_4k.webp', (full) => {
+      full.colorSpace = THREE.SRGBColorSpace;
+      const small = starmap;
+      starmap = full;
+      for (const m of skies) m.map = full;
+      small.dispose();
+    });
+  });
+  starmap.colorSpace = THREE.SRGBColorSpace;
+  return starmap;
+}
+
 // The backdrop: 1.7 billion real stars (NASA SVS Deep Star Maps 2020, Gaia DR2: ESA/Gaia/DPAC),
 // on a sphere that follows the camera, plus a sun with a soft glare.
 export class Sky {
   constructor(scene, { brightness = 0.55 } = {}) {
-    const texture = new THREE.TextureLoader().load('universe/starmap_4k.jpg');
-    texture.colorSpace = THREE.SRGBColorSpace;
+    const texture = starmapTexture();
     this.stars = new THREE.Mesh(
       new THREE.SphereGeometry(9000, 64, 32),
       new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide, depthWrite: false, color: new THREE.Color(brightness, brightness, brightness) })
     );
+    skies.add(this.stars.material);
     this.stars.renderOrder = -10;
     this.stars.rotation.set(0.4, 2.2, 0.1);
     scene.add(this.stars);

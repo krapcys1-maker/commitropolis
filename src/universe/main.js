@@ -13,7 +13,8 @@ import { UniverseView } from './universeView.js';
 import { SystemView } from './systemView.js';
 import { OrgView } from './orgView.js';
 import { LEVELS, PROLOGUE } from './lore.js';
-import { GALAXY, GALAXIES, accountOf, galaxyIdOf } from './cosmos.js';
+import { GALAXY, GALAXIES, accountOf, galaxyIdOf, galaxyOfRepos } from './cosmos.js';
+import { loadPlanet } from './planetView.js';
 import { ScaleHud, watchZoom } from '../scale.js';
 import { Sound } from '../sound.js';
 import { catalogOf } from './systemView.js';
@@ -177,6 +178,66 @@ function updateLeaving(dt) {
   then();
 }
 
+// The autopilot: from the whole cluster down to one world, scale by scale, by itself.
+// It waits for each flight to land, pauses a beat, then takes the next hop.
+let autopilot = null;
+async function flyHome(login) {
+  ui.hint(`Autopilot: charting @${login}…`);
+  let gid;
+  let lang = 'Other';
+  let stars = 0;
+  const known = await accountOf(login);
+  if (known) {
+    gid = known.g;
+    login = known.l;
+  } else {
+    try {
+      const d = await loadPlanet(login);
+      login = d.login;
+      gid = galaxyOfRepos(d.repos);
+      const langs = {};
+      for (const r of d.repos) if (r.lang) langs[r.lang] = (langs[r.lang] ?? 0) + r.s;
+      lang = Object.entries(langs).sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'Other';
+      stars = d.repos.reduce((n, r) => n + r.s, 0);
+    } catch (err) {
+      ui.toast(err.message);
+      return;
+    }
+  }
+  autopilot = { login, gid, lang, stars, stage: 'universe', wait: 0.4 };
+  history.replaceState({}, '', `?home=${encodeURIComponent(login)}`);
+  if (current !== views.universe) await go({}, { push: false });
+}
+ctx.flyHome = flyHome;
+
+function updateAutopilot(dt) {
+  const a = autopilot;
+  if (!a || leaving || current?.flying || current?.landing || current?.ascending || !$('loading').hidden) return;
+  a.wait -= dt;
+  if (a.wait > 0) return;
+  const name = GALAXY[a.gid]?.name ?? 'its galaxy';
+  if (a.stage === 'universe' && current === views.universe) {
+    ui.hint(`Autopilot: @${a.login} lives in ${name}`);
+    sound.whoosh(false);
+    views.universe.enterGalaxy(a.gid);
+    a.stage = 'galaxy';
+    a.wait = 0.9;
+  } else if (a.stage === 'galaxy' && current instanceof GalaxyView) {
+    ui.hint(`Autopilot: into the star system of @${a.login}`);
+    current.visit(a.login, 'system');
+    a.stage = 'system';
+    a.wait = 1.1;
+  } else if (a.stage === 'system' && current === views.system) {
+    ui.hint(`Autopilot: @${a.login}, your world`);
+    views.system.visit(a.home ?? a.login);
+    a.stage = 'world';
+  } else if ((a.stage === 'system' && current === views.org) || (a.stage === 'world' && current === views.planet)) {
+    autopilot = null;
+    sound.chime();
+    ui.toast(`Welcome home, <b>@${a.login}</b>. Share your world from the card, or zoom into one of your cities.`);
+  }
+}
+
 // The rungs of the scale ladder for the view on screen (src/scale.js).
 function ladder() {
   const v = current;
@@ -246,7 +307,8 @@ async function go(route, { push = true } = {}) {
       document.title = `★ @${views.org.data.login} · Commitverse`;
     } else if (route.system) {
       const home = views.planet.data?.login?.toLowerCase() === route.system.toLowerCase() ? views.planet : null;
-      const fallback = home ? { l: home.data.login, s: home.planet?.stars ?? 0, lang: home.planet?.mainLanguage ?? 'Other', sector: 'arm', top: [] } : { l: route.system, s: 0, lang: 'Other', sector: 'arm', top: [] };
+      const pilot = autopilot?.login.toLowerCase() === route.system.toLowerCase() ? autopilot : null;
+      const fallback = home ? { l: home.data.login, s: home.planet?.stars ?? 0, lang: home.planet?.mainLanguage ?? 'Other', sector: 'arm', top: [] } : { l: route.system, s: pilot?.stars ?? 0, lang: pilot?.lang ?? 'Other', sector: 'arm', top: [] };
       const sys = await views.system.enter(route.system, fallback, { fromWorld: route.fromWorld });
       current = views.system;
       ui.crumbs([{ label: 'Commitverse', href: './' }, { label: sys.galaxy.name, href: `./?galaxy=${sys.galaxy.id}` }, { label: `System ${sys.catalog}` }]);
@@ -377,7 +439,7 @@ $('codex-btn').onclick = openCodex;
 
 async function prologue() {
   // the prologue opens the universe; a link to a particular place goes straight there
-  if (['planet', 'system', 'galaxy', 'sector', 'skip'].some((k) => params.has(k)) || sessionStorage.getItem('prologue')) return;
+  if (['planet', 'system', 'galaxy', 'sector', 'skip', 'home'].some((k) => params.has(k)) || sessionStorage.getItem('prologue')) return;
   try {
     sessionStorage.setItem('prologue', '1');
   } catch {}
@@ -390,7 +452,7 @@ async function prologue() {
     p.textContent = line;
     el.querySelector('.lines').appendChild(p);
     setTimeout(() => p.classList.add('in'), 30);
-    if ((await Promise.race([sleep(2300).then(() => 'next'), skip.then(() => 'skip')])) === 'skip') break;
+    if ((await Promise.race([sleep(1700).then(() => 'next'), skip.then(() => 'skip')])) === 'skip') break;
   }
   el.classList.add('out');
   setTimeout(() => (el.hidden = true), 1200);
@@ -407,6 +469,7 @@ function stepFrame(dt) {
   current?.update(dt, time);
   if (leaving) updateLeaving(dt);
   else if (!current?.landing && !current?.flying && !current?.ascending) controls.update();
+  updateAutopilot(dt);
   finish.uniforms.uWarp.value = warpNow();
   composer.render();
   labelRenderer.render(current?.scene ?? renderPass.scene, camera);
@@ -451,5 +514,6 @@ await go(
   { push: false }
 );
 if (!params.has('capture')) frame();
+if (params.get('home')) flyHome(params.get('home'));
 await intro;
 }
