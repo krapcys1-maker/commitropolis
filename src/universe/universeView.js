@@ -157,6 +157,100 @@ export class UniverseView {
     this.byId = Object.fromEntries(this.galaxies.map((g) => [g.spec.id, g]));
     this.#buildGit();
     this.#buildMigrations(cosmos);
+    this.#buildWeb();
+    this.#buildDistant();
+  }
+
+  // The cosmic web: faint filaments of gas from every galaxy in to the Titans and across to its
+  // nearest neighbour, so the cluster reads as one structure rather than islands.
+  #buildWeb() {
+    const rand = rng(hashString('cosmic web'));
+    const pairs = [];
+    const seen = new Set();
+    for (const g of this.galaxies) {
+      if (g.spec.id !== 'titan') pairs.push([g, this.byId.titan]);
+      let near = null;
+      let best = Infinity;
+      for (const h of this.galaxies) {
+        if (h === g || h.spec.id === 'titan') continue;
+        const d = h.group.position.distanceTo(g.group.position);
+        if (d < best) {
+          best = d;
+          near = h;
+        }
+      }
+      const key = [g.spec.id, near?.spec.id].sort().join();
+      if (near && g.spec.id !== 'titan' && !seen.has(key)) {
+        seen.add(key);
+        pairs.push([g, near]);
+      }
+    }
+    const per = 700;
+    const n = pairs.length * per;
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const size = new Float32Array(n);
+    const phase = new Float32Array(n);
+    const c = new THREE.Color();
+    pairs.forEach(([a, b], k) => {
+      const A = a.group.position;
+      const B = b.group.position;
+      const mid = A.clone().lerp(B, 0.5).add(new THREE.Vector3(gauss(rand) * 700, gauss(rand) * 500, gauss(rand) * 700));
+      const curve = new THREE.QuadraticBezierCurve3(A, mid, B);
+      const ca = new THREE.Color(a.spec.color);
+      const cb = new THREE.Color(b.spec.color);
+      for (let i = 0; i < per; i++) {
+        const t = 0.08 + rand() * 0.84; // not inside the galaxies themselves
+        const p = curve.getPoint(t);
+        const width = 260 * (0.45 + Math.sin(Math.PI * t));
+        const j = (k * per + i) * 3;
+        pos.set([p.x + gauss(rand) * width, p.y + gauss(rand) * width * 0.6, p.z + gauss(rand) * width], j);
+        c.copy(ca).lerp(cb, t).lerp(new THREE.Color('#9fb3ff'), 0.5).multiplyScalar(0.06 + rand() * 0.08);
+        col.set([c.r, c.g, c.b], j);
+        size[k * per + i] = 30 + rand() * 60;
+        phase[k * per + i] = rand();
+      }
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+    const web = new THREE.Points(
+      geo,
+      new THREE.ShaderMaterial({ uniforms: { uTime: this.uniforms.uTime, uScale: this.uniforms.uScale, uGlow: { value: 1 } }, vertexShader: POINT_VERTEX, fragmentShader: POINT_FRAGMENT, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    this.scene.add(web);
+  }
+
+  // Other clusters, far beyond this one: the Commitverse is not the only thing out there.
+  #buildDistant() {
+    const rand = rng(hashString('distant galaxies'));
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 128;
+    const g = canvas.getContext('2d');
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.15, 'rgba(255,240,220,0.55)');
+    grad.addColorStop(0.5, 'rgba(200,210,255,0.12)');
+    grad.addColorStop(1, 'rgba(200,210,255,0)');
+    g.fillStyle = grad;
+    g.save();
+    g.translate(64, 64);
+    g.scale(1, 0.38); // seen at an angle: an ellipse
+    g.translate(-64, -64);
+    g.fillRect(0, 0, 128, 128);
+    g.restore();
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const tints = ['#ffe2b8', '#cfd9ff', '#ffd0e8', '#d8ffe9', '#fff4d6'];
+    for (let i = 0; i < 160; i++) {
+      const dir = new THREE.Vector3(gauss(rand), gauss(rand) * 0.6, gauss(rand)).normalize();
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(tints[i % tints.length]), transparent: true, opacity: 0.18 + rand() * 0.4, depthWrite: false, blending: THREE.AdditiveBlending, rotation: rand() * Math.PI }));
+      sp.position.copy(dir.multiplyScalar(48000 + rand() * 30000));
+      sp.scale.setScalar(700 + Math.pow(rand(), 2) * 2600);
+      this.scene.add(sp);
+    }
   }
 
   // git at the heart of the cluster: everything here is built with it
@@ -391,7 +485,8 @@ export class UniverseView {
 
   update(dt, time) {
     this.uniforms.uTime.value = time;
-    this.uniforms.uScale.value = innerHeight * 0.9;
+    // points keep their size in the picture whatever the field of view (a vertical film widens it)
+    this.uniforms.uScale.value = (innerHeight * 0.9 * 0.41421356) / Math.tan((this.ctx.camera.fov * Math.PI) / 360);
     for (const g of this.galaxies ?? []) g.spin.rotation.y += dt * g.speed;
     if (this.git) this.git.rotation.y += dt * 0.2;
     this.#updateMigrations(time);

@@ -10,6 +10,11 @@ const clamp01 = (t) => Math.max(0, Math.min(1, t));
 const span = (t, a, b) => clamp01((t - a) / (b - a));
 const envelope = (t, a, b, fade = 0.6) => Math.min(span(t, a, a + fade), 1 - span(t, b - fade, b));
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const hashUnit = (s) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 100000) / 100000;
+};
 const day = (t) => new Date(t * 1000).toISOString().slice(0, 10);
 const month = (t) => new Date(t * 1000).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 const CODE = new Set(['c', 'cu', 'h', 'cc', 'cpp', 'hpp', 'py', 'js', 'mjs', 'ts', 'tsx', 'go', 'rs', 'java', 'zig', 'rb', 'cs', 'swift', 'kt']);
@@ -35,22 +40,38 @@ export class CityDirector {
     await new Promise((resolve) => (link.onload = link.onerror = resolve));
     await Promise.all(['600 20px "Space Grotesk"', '500 20px "JetBrains Mono"'].map((f) => document.fonts.load(f).catch(() => null)));
 
-    const { data, controls, timelapse } = this.cp;
+    const { data, controls, timelapse, camera } = this.cp;
     this.size = data.size;
+    // a vertical film (Shorts, Reels) keeps the landscape film's width of view
+    if (camera.aspect < 1) {
+      camera.fov = (2 * Math.atan(Math.tan((22.5 * Math.PI) / 180) / camera.aspect) * 180) / Math.PI;
+      camera.updateProjectionMatrix();
+    }
     controls.enabled = false;
     controls.autoRotate = false;
     const params = new URLSearchParams(location.search);
     const path = params.get('enter');
     this.building = path ? data.files.findIndex((f) => f.p === path) : -1;
     if (this.building < 0) {
-      let best = -1;
-      data.files.forEach((f, i) => {
-        if (f.alive && CODE.has(f.p.split('.').pop().toLowerCase()) && (best < 0 || f.loc > data.files[best].loc)) best = i;
-      });
-      this.building = best;
+      // the tallest hand-written code: generated files are often the biggest, and the least telling
+      const GENERATED = /(^|\/)(ent|gen|generated|vendor|mocks?|dist|build|third_party|node_modules)\/|\.(pb|gen|generated|min)\.|_pb2\.|_generated\./i;
+      const code = data.files.map((f, i) => [f, i]).filter(([f]) => f.alive && CODE.has(f.p.split('.').pop().toLowerCase()) && !GENERATED.test(f.p));
+      const pick = (list) => list.reduce((best, x) => (!best || x[0].loc > best[0].loc ? x : best), null)?.[1] ?? -1;
+      this.building = pick(code.filter(([f]) => f.loc <= 5000));
+      if (this.building < 0) this.building = pick(code);
     }
-    timelapse.duration = T.history;
-    timelapse.seek(0);
+    // a live snapshot (src/liveCity.js) has no history to replay: its buildings rise in waves from the
+    // centre outward instead, and the ones worked on lately flash as they go up
+    this.snapshot = !!data.snapshot;
+    if (this.snapshot) {
+      const far = Math.max(...data.files.map((f) => Math.hypot(f.x + f.w / 2, f.z + f.d / 2)), 1);
+      this.rise = data.files.map((f) => T.play + 8.4 * Math.pow(Math.hypot(f.x + f.w / 2, f.z + f.d / 2) / far, 0.8) + (hashUnit(f.p) - 0.5) * 0.6);
+      this.risen = new Uint8Array(data.files.length);
+      this.cp.city.showEmpty();
+    } else {
+      timelapse.duration = T.history;
+      timelapse.seek(0);
+    }
     this.seen = new WeakSet(); // city effects already noted as cues
 
     this.cine = document.createElement('div');
@@ -77,18 +98,23 @@ export class CityDirector {
     this.captionAlpha = 0;
     this.ready = true;
     await this.step(0);
-    if (!params.has('capture')) this.play();
+    // ?record waits for the viewer to press record (src/main.js); ?capture is stepped from outside
+    if (!params.has('capture') && !params.has('record')) this.play();
   }
 
+  // Real time; resolves when the film is over.
   play() {
-    let last = performance.now();
-    const loop = () => {
-      const now = performance.now();
-      this.step(Math.min((now - last) / 1000, 0.1));
-      last = now;
-      if (this.t < this.duration + 0.5) requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
+    return new Promise((resolve) => {
+      let last = performance.now();
+      const loop = () => {
+        const now = performance.now();
+        this.step(Math.min((now - last) / 1000, 0.1));
+        last = now;
+        if (this.t < this.duration + 0.3) requestAnimationFrame(loop);
+        else resolve();
+      };
+      requestAnimationFrame(loop);
+    });
   }
 
   #caption(title, sub, opacity) {
@@ -101,6 +127,28 @@ export class CityDirector {
   #top(html, opacity) {
     if (this.el.top.innerHTML !== html) this.el.top.innerHTML = html;
     this.el.top.style.opacity = opacity;
+  }
+
+  // A snapshot city going up: every building rises over 1.4 s from its own moment, and the ones worked
+  // on lately (src/liveCity.js) flash as they top out, like commits.
+  #raise(t) {
+    const { city, data } = this.cp;
+    if (t > T.fly) return;
+    let risen = 0;
+    data.files.forEach((f, i) => {
+      const k = ease(span(t, this.rise[i], this.rise[i] + 1.4));
+      city.loc[i] = f.loc * k;
+      city.lastTouch[i] = k > 0 ? f.last : 0;
+      if (k > 0) risen++;
+      if (k >= 1 && !this.risen[i]) {
+        this.risen[i] = 1;
+        if (f.c > 0) city.touch(i, f.loc, 0);
+      }
+    });
+    this.risenCount = risen;
+    city.now = data.snapshot.now;
+    city.ruinMode = true;
+    city.update();
   }
 
   // Orbit around the city, high enough to watch all of it grow: angle, distance and height
@@ -120,7 +168,8 @@ export class CityDirector {
 
     // ---- arrival and history
     this.veil.style.opacity = 1 - ease(span(t, 0.1, 2.5));
-    if (t >= T.play && !this.played) {
+    if (this.snapshot) this.#raise(t);
+    else if (t >= T.play && !this.played) {
       this.played = true;
       timelapse.play();
     }
@@ -144,25 +193,41 @@ export class CityDirector {
       this.el.yearN.textContent = c ? day(c.t) : '';
       this.el.count.textContent = `${fmt(timelapse.cursor)} commits`;
     }
+    if (this.snapshot && t > 0.8) {
+      this.el.yearN.textContent = day(data.snapshot.now);
+      this.el.count.textContent = `${fmt(this.risenCount ?? 0)} buildings`;
+    }
     this.el.year.style.opacity = envelope(t, 1.0, 13.2, 0.7);
 
     const first = data.commits[0]?.t ?? 0;
     const last = data.commits.at(-1)?.t ?? 0;
     const f = data.files[this.building];
-    this.#top(`${data.repo.name}<small>${fmt(data.files.filter((x) => x.alive).length)} buildings · ${fmt(data.commits.length)} commits</small>`, envelope(t, 1.4, 13.4, 0.7));
+    const stat = this.snapshot ? `${fmt(data.files.length)} buildings · ${fmt(data.snapshot.stars ?? 0)} ★` : `${fmt(data.files.filter((x) => x.alive).length)} buildings · ${fmt(data.commits.length)} commits`;
+    this.#top(`${data.repo.name}<small>${stat}</small>`, envelope(t, 1.4, 13.4, 0.7));
     this.el.center.classList.toggle('aside', t > 14);
     if (t < 6.6) this.#caption('Every file is a building.', 'every folder, a district', envelope(t, 2.4, 6.4, 0.6));
+    else if (t < 12 && this.snapshot) this.#caption('Every line is a floor.', 'lit windows: the files worked on lately', envelope(t, 6.8, 11.4, 0.6));
     else if (t < 12) this.#caption('Every commit raises the city.', `${fmt(data.commits.length)} commits · ${month(first)} → ${month(last)}`, envelope(t, 6.8, 11.4, 0.6));
-    else if (t > 16 && t < T.end) this.#caption('Every floor is a line of code.', `${f.p.split('/').pop()} · ${fmt(f.loc)} lines`, envelope(t, 16.4, 21.4, 0.6));
+    else if (t > 16 && t < T.end && f) this.#caption('Every floor is a line of code.', `${f.p.split('/').pop()} · ${fmt(f.loc)} lines`, envelope(t, 16.4, 21.4, 0.6));
     else this.#caption('', '', 0);
 
     // ---- into the tallest tower
     if (t >= T.fly && !this.flown) {
       this.flown = true;
       if (timelapse.active) timelapse.finish();
-      this.cp.flyTo(f.p);
+      if (this.snapshot) this.cp.city.showFinal();
+      if (f) this.cp.flyTo(f.p);
     }
-    if (t >= T.enter && !this.entered) {
+    if (!f) {
+      // a city without a code file to walk into: keep circling until the end card
+      if (t >= T.fly && t < T.end) {
+        const k = ease(span(t, T.fly, T.end));
+        const a = 1.8 + 0.6 * k;
+        camera.position.set(Math.sin(a) * s * 0.9, s * THREE.MathUtils.lerp(0.48, 0.3, k), Math.cos(a) * s * 0.9);
+        controls.target.set(0, s * 0.02, 0);
+      }
+    }
+    if (t >= T.enter && !this.entered && f) {
       this.entered = true;
       await this.cp.enterBuilding(this.building);
     }

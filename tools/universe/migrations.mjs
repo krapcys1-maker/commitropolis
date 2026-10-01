@@ -5,7 +5,7 @@
 //
 //   node tools/universe/migrations.mjs <previous galaxy.json> [current galaxy.json]
 import fs from 'node:fs';
-import { galaxyOf, MEGASTAR } from '../../src/universe/cosmos.js';
+import { galaxyOf, MEGASTAR } from '../../src/universe/galaxies.js';
 
 export const LOG_FILE = 'public/universe/migrations.json';
 

@@ -90,6 +90,8 @@ export class Director {
     controls.maxDistance = Infinity;
     camera.near = 1;
     camera.far = 30000;
+    // a vertical film (Shorts, Reels) keeps the landscape film's width of view
+    if (camera.aspect < 1) camera.fov = (2 * Math.atan(Math.tan((22.5 * Math.PI) / 180) / camera.aspect) * 180) / Math.PI;
     camera.updateProjectionMatrix();
 
     this.galaxy = views.galaxy;

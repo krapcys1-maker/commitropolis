@@ -35,7 +35,10 @@ export class CodeReader {
     const token = ++this.token;
     this.root.hidden = false;
     this.root.querySelector('#reader-path').textContent = file.p;
-    this.root.querySelector('#reader-meta').textContent = `${file.loc.toLocaleString('en-US')} lines · ${file.c} commits`;
+    // a live snapshot (src/liveCity.js) only knows a file's size, and whether it was worked on lately
+    this.root.querySelector('#reader-meta').textContent = data.snapshot
+      ? `about ${file.loc.toLocaleString('en-US')} lines · ${file.c ? 'worked on lately' : 'quiet lately'}`
+      : `${file.loc.toLocaleString('en-US')} lines · ${file.c} commits`;
     const gh = this.root.querySelector('#reader-gh');
     gh.hidden = !data.repo.url;
     if (data.repo.url) gh.href = `${data.repo.url}/blob/${data.repo.head}/${file.p}`;

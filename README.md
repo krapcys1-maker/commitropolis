@@ -1,5 +1,11 @@
 # Commitverse
 
+[![Live](https://img.shields.io/badge/explore-the%20Commitverse-7fd4ff?style=flat-square)](https://krapcys1-maker.github.io/commitverse/)
+[![Film](https://img.shields.io/badge/watch-the%20film%20(72s)-ffcf87?style=flat-square)](https://krapcys1-maker.github.io/commitverse/media/commitverse-bigbang.mp4)
+[![Universe refresh](https://img.shields.io/github/actions/workflow/status/krapcys1-maker/commitverse/universe.yml?label=universe%20refreshed%20daily&style=flat-square)](.github/workflows/universe.yml)
+[![Stars](https://img.shields.io/github/stars/krapcys1-maker/commitverse?style=flat-square&color=ffcf87)](https://github.com/krapcys1-maker/commitverse/stargazers)
+[![MIT](https://img.shields.io/badge/license-MIT-8d97b8?style=flat-square)](LICENSE)
+
 **The universe of open source.** Every GitHub account is a world and every repository is a city on it. Every file is a building, and every line of code is a floor. The worlds gather in galaxies by the kind of code they write. As projects grow, they migrate between galaxies, so the universe changes along with GitHub, every day.
 
 [![The Big Bang of open source: a 72-second film. Click to watch it with sound](docs/img/teaser.webp)](https://krapcys1-maker.github.io/commitverse/media/commitverse-bigbang.mp4)
@@ -23,6 +29,49 @@ The Commitverse is 14 galaxies around the git singularity, and every world belon
 
 **Join it.** ⭐ [Star this repository](https://github.com/krapcys1-maker/commitverse) and your world appears in its galaxy at the next daily update.
 
+## Your world in your README
+
+[![@karpathy's world in the Commitverse](docs/img/card-karpathy.svg)](https://krapcys1-maker.github.io/commitverse/?planet=karpathy)
+
+Every world has a card. It is an animated SVG that wears your main language's climate and your level of civilisation: a moon, satellites, rockets and orbital rings, with city lights on the night side and an aurora if you shipped this month. Get yours from **Share this world** on your planet, or let a GitHub Action redraw it every day. Add this to `.github/workflows/commitverse.yml` in your profile repository (`github.com/<you>/<you>`):
+
+```yaml
+name: Commitverse world
+on:
+  schedule: [{ cron: '0 3 * * *' }]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  card:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: krapcys1-maker/commitverse/card@main
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add commitverse-world.svg
+          git commit -m "Commitverse: my world today" || exit 0
+          git push
+```
+
+Then put it in your README:
+
+```markdown
+[![My world in the Commitverse](commitverse-world.svg)](https://krapcys1-maker.github.io/commitverse/?planet=<you>)
+```
+
+## A film of any repository
+
+Land in any city and press **🎬 Film**. You get 29 seconds, recorded in your browser, with music:
+- you arrive through the clouds;
+- the city rebuilds itself from its history (or rises from its files);
+- you ride an elevator up its tallest tower while its code scrolls past;
+- the end card closes it.
+
+It is saved as an MP4 you can post anywhere.
+
 ## Travel
 
 It's one continuous zoom: **universe → galaxy → star system → world → city → building → line of code**. A scale ladder on the left shows where you are.
@@ -44,6 +93,7 @@ It's one continuous zoom: **universe → galaxy → star system → world → ci
 Every world shows all of its maker's repositories, and you can land in any of them:
 - **Surveyed cities** (prebaked, or mapped by the [mapping service](server/README.md)) carry their whole history. Replay it as a timelapse with demolitions, release rockets and asteroid impacts.
 - **Any other public repository** is raised live from the GitHub API in four requests. You get the tree of files at HEAD, and the files the last 100 commits touched are lit. One click on *Survey its whole history* replaces the snapshot with the full city.
+- **At night the streets are alive**: thousands of cars, headlights one way and tail lights the other, and busier traffic in a busier repository.
 
 ![Andrej Karpathy's world, a Level 6 Ecumenopolis: city lights on the night side, an orbital ring with a space elevator](docs/img/planet-karpathy.jpg)
 <sub>@karpathy's world, rendered with Blender Cycles from real GitHub data. 494,341 ★ make it a Level 6 *Ecumenopolis*.</sub>
@@ -64,6 +114,9 @@ Every visual rule is a measurement, so nothing is decoration:
 | City lights on the night side | Where work happened recently; quiet code goes dark |
 | A star with megastructures | An organisation. Its repositories orbit as ring arcs, the flagship becomes a Dyson ring, and its members are the worlds further out |
 | A comet across the cluster | A world migrating between galaxies, or a protostar that ignited into a megastar |
+| Aurorae over a world's poles | It shipped this week (bright) or this month (faint) |
+| Fleets of ships around a world | Its contributors, from Level 5 (Spacefaring) up |
+| Traffic in a city's streets | How busy its repository is lately |
 | git at the centre | Everything here is built with it |
 
 ## Live events
@@ -138,7 +191,8 @@ Working now:
 - a city for every public repository, with the whole history for surveyed ones;
 - timelapses with demolitions, release rockets and asteroid impacts;
 - the code elevator;
-- the film and the Blender posters.
+- the film, films of any city recorded in the browser, and the Blender posters;
+- world cards for profile READMEs, drawn by a GitHub Action.
 
 Next up:
 - an AI guide;

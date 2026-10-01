@@ -244,10 +244,32 @@ export class GalaxyView {
       if (this.ctx.controls.target.length() > 40) return { label: `The whole of ${this.spec.name.replace(/^The /, 'the ')}`, go: () => this.overview() };
       return this.legacy ? null : { label: 'Out to the Commitverse: every galaxy', go: () => this.zoomOut() };
     }
-    const { index, kind } = this.#pick(event, 90);
+    let { index, kind } = this.#pick(event, 90);
+    if (index < 0) ({ index, kind } = this.#nearest(this.ctx.controls.target, 220));
     if (index < 0) return null;
     const login = kind === 'world' ? this.data.accounts[index].l : this.data.nursery[index].r.split('/')[0];
     return { label: `Into @${login}'s star system`, go: () => this.visit(login, 'system') };
+  }
+
+  // The star nearest a point in space: zoomed all the way in, you enter whatever you're looking at
+  // (zooming toward the cursor can carry the camera past the star that was under it).
+  #nearest(at, radius) {
+    const v = new THREE.Vector3();
+    let best = -1;
+    let bestD = radius;
+    let kind = null;
+    const test = (list, k) =>
+      list.forEach((p, i) => {
+        const d = v.copy(p).applyMatrix4(this.disk.matrixWorld).distanceTo(at);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+          kind = k;
+        }
+      });
+    test(this.worldPos, 'world');
+    test(this.protoPos ?? [], 'proto');
+    return { index: best, kind };
   }
 
   // back out to the whole galaxy, centred on the singularity
@@ -835,7 +857,8 @@ export class GalaxyView {
 
   update(dt, time) {
     this.uniforms.uTime.value = time;
-    this.uniforms.uScale.value = innerHeight * 0.9;
+    // points keep their size in the picture whatever the field of view (a vertical film widens it)
+    this.uniforms.uScale.value = (innerHeight * 0.9 * 0.41421356) / Math.tan((this.ctx.camera.fov * Math.PI) / 360);
     this.disk.rotation.y += dt * 0.004;
     this.singularity.rotation.y += dt * 0.25;
     this.#updateSupernovae(time);

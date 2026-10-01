@@ -14,6 +14,7 @@ import { CodeReader } from './reader.js';
 import { search } from './search.js';
 import { fetchCity, apiBase, mapCity } from './config.js';
 import { CityEvents } from './cityEvents.js';
+import { Traffic } from './traffic.js';
 import { ScaleHud, watchZoom } from './scale.js';
 import { GALAXY, galaxyIdOf } from './universe/cosmos.js';
 
@@ -97,6 +98,7 @@ let events = null; // rockets and asteroid impacts in the timelapse
 let shake = null;
 let captionUntil = 0; // on the frame clock, so captions behave the same live and in a frame-by-frame capture
 let ascending = null; // rising out of the city, up through the clouds to its world
+let traffic = null; // car lights on the streets (traffic.js)
 const scale = new ScaleHud();
 
 function showCaption(text) {
@@ -154,6 +156,9 @@ async function load(slug, focus) {
   }
   city = new City(data, uniforms);
   scene.add(city.group);
+  traffic?.dispose();
+  traffic = new Traffic(city);
+  city.group.add(traffic.points);
   timelapse = new Timelapse(city);
   timelapse.onCommit = showCommit;
   events = new CityEvents(city, { caption: showCaption, shake: (amp, dur) => (shake = { amp, dur, t: dur }) });
@@ -294,6 +299,7 @@ function updateAscend(dt) {
   camera.position.copy(ascending.from).add(new THREE.Vector3(0, data.size * 1.8 * k * k, 0));
   camera.lookAt(ascending.target);
   $('arrival').style.opacity = Math.min(1, k * 1.3);
+  finish.uniforms.uWarp.value = k * 0.7;
   if (k >= 1 && !ascending.left) {
     ascending.left = true;
     location.href = worldHref();
@@ -595,6 +601,7 @@ function stepFrame(dt) {
       $('timeline').value = 1000;
     }
   }
+  traffic?.update(time);
   if (city) {
     city.tick(dt, time);
     if (selected >= 0 && !timelapse.active && !elevator) city.setHeat(selected, city.baseHeat[selected] + 0.9 + Math.sin(time * 4) * 0.4);
@@ -646,13 +653,92 @@ window.commitropolis = {
   stepFrame,
 };
 
+// A film of this city: the page reloads in director mode, ready to record (?director&record).
+$('film-btn').onclick = () => {
+  const url = new URL(location.href);
+  url.searchParams.set('repo', params.get('repo') || $('repo-select').value);
+  for (const k of ['focus', 'arrive']) url.searchParams.delete(k);
+  url.searchParams.set('director', '');
+  url.searchParams.set('record', '');
+  location.href = url.href.replace(/=(&|$)/g, '$1');
+};
+
+// Ready to roll: record the tab (with the soundtrack) or just watch; afterwards, download the film.
+async function recordFlow(director) {
+  const { canRecord, recordTab } = await import('./recorder.js');
+  const panel = $('rec');
+  const name = data.repo.name;
+  const back = () => {
+    const url = new URL(location.href);
+    url.searchParams.delete('director');
+    url.searchParams.delete('record');
+    location.href = url.href;
+  };
+  const audio = new Audio('media/city-film.mp3');
+  audio.preload = 'auto';
+  const show = (html) => {
+    panel.innerHTML = html;
+    panel.hidden = false;
+  };
+  show(`<div class="rec-card">
+      <div class="rec-kicker">🎬 A film of</div>
+      <h2>${name}</h2>
+      <p>29 seconds: the arrival, ${data.snapshot ? 'the city rising' : 'its whole history'}, the tallest tower, the end card. With music.</p>
+      <div class="rec-row">
+        ${canRecord() ? '<button id="rec-go" class="primary">● Record the film</button>' : ''}
+        <button id="rec-watch">▶ Just watch</button>
+        <button id="rec-back">Back to the city</button>
+      </div>
+      <p class="rec-note">${canRecord() ? 'Your browser will ask what to share: choose <b>this tab</b>. Nothing leaves your computer; you get the file to download.' : 'This browser can\'t record a tab. Watch it and use your own screen recorder.'}</p>
+    </div>`);
+  $('rec-back').onclick = back;
+  const finished = (file) => {
+    const done = file
+      ? `<video src="${URL.createObjectURL(file.blob)}#t=4" controls playsinline></video>
+         <div class="rec-row"><a class="primary" download="commitverse-${name.replace('/', '-')}.${file.ext}" href="${URL.createObjectURL(file.blob)}">⬇ Download the film (.${file.ext})</a></div>`
+      : '';
+    show(`<div class="rec-card">
+        <div class="rec-kicker">🎬 That's a wrap</div>
+        <h2>${name}</h2>
+        ${done}
+        <p>${file ? 'Post it anywhere and tag it <b>#Commitverse</b>.' : 'Record it to get a file you can post.'}</p>
+        <div class="rec-row"><button id="rec-again">↺ Again</button><button id="rec-back2">Back to the city</button></div>
+      </div>`);
+    $('rec-again').onclick = () => location.reload();
+    $('rec-back2').onclick = back;
+  };
+  $('rec-watch').onclick = async () => {
+    panel.hidden = true;
+    audio.play().catch(() => {});
+    await director.play();
+    finished(null);
+  };
+  const go = $('rec-go');
+  if (go)
+    go.onclick = async () => {
+      let rec;
+      try {
+        rec = await recordTab(audio);
+      } catch (err) {
+        panel.querySelector('.rec-note').textContent = `Recording didn't start (${err.message}). You can still just watch it.`;
+        return;
+      }
+      panel.hidden = true;
+      await new Promise((r) => setTimeout(r, 350)); // let the panel disappear from the picture first
+      audio.play().catch(() => {});
+      await Promise.race([director.play(), rec.ended]);
+      finished({ blob: await rec.stop(), ext: rec.ext });
+    };
+}
+
 await loadIndex();
 if (params.has('director')) {
-  // the film, part two (tools/video/capture.mjs): no HUD, the director drives every frame
+  // the film (tools/video/capture.mjs, or recorded by a viewer): no HUD, the director drives every frame
   document.body.classList.add('director');
   finish.uniforms.uGrainAnim.value = 0; // a static dither: moving grain only costs video bitrate
   finish.uniforms.uGrain.value = 0.014;
   const { CityDirector } = await import('./cityDirector.js');
   window.director = new CityDirector(window.commitropolis);
   await window.director.prepare();
+  if (params.has('record')) recordFlow(window.director);
 } else if (!captureMode) loop();

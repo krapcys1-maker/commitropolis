@@ -1,0 +1,32 @@
+name: Commitverse world card
+description: Your GitHub account as a world in the Commitverse, an animated SVG card for your profile README.
+author: krapcys1-maker
+branding:
+  icon: globe
+  color: purple
+
+inputs:
+  login:
+    description: The account to draw (defaults to the repository owner)
+    required: false
+    default: ${{ github.repository_owner }}
+  output:
+    description: Where to write the SVG
+    required: false
+    default: commitverse-world.svg
+  token:
+    description: A token for the GitHub API (the workflow's own token is enough)
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Draw the world
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: node "${{ github.action_path }}/card.mjs" "${{ inputs.login }}" "${{ inputs.output }}"

@@ -297,7 +297,8 @@ export function createBeamMaterial() {
 // Final touch after tone mapping: vignette and a little film grain.
 export const FinishShader = {
   // uGrainAnim 0 freezes the grain into a static dither (the film: moving grain costs video bitrate)
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0.022 }, uGrainAnim: { value: 1 } },
+  // uWarp (0..1): a zoom blur toward the centre with bright streaks, for travelling between scales
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0.022 }, uGrainAnim: { value: 1 }, uWarp: { value: 0 } },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() {
@@ -309,9 +310,25 @@ export const FinishShader = {
     uniform float uTime;
     uniform float uGrain;
     uniform float uGrainAnim;
+    uniform float uWarp;
     varying vec2 vUv;
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
+      if (uWarp > 0.002) {
+        vec2 dir = vUv - 0.5;
+        vec4 acc = c;
+        float total = 1.0;
+        for (int i = 1; i < 14; i++) {
+          float k = float(i) / 14.0;
+          float w = 1.0 - k * 0.7;
+          acc += texture2D(tDiffuse, 0.5 + dir * (1.0 - k * 0.42 * uWarp)) * w;
+          total += w;
+        }
+        vec4 blur = acc / total;
+        float edge = smoothstep(0.08, 0.6, length(dir));
+        c = mix(c, blur, min(1.0, uWarp * 1.6) * (0.35 + 0.65 * edge));
+        c.rgb += blur.rgb * uWarp * edge * 0.6; // light stretched into streaks
+      }
       vec2 p = vUv - 0.5;
       c.rgb *= mix(0.62, 1.0, smoothstep(0.9, 0.25, length(p * vec2(1.0, 0.85))));
       float g = fract(sin(dot(vUv * (1.0 + fract(uTime) * uGrainAnim), vec2(12.9898, 78.233))) * 43758.5453);

@@ -4,6 +4,7 @@ import { Planet, R } from './planet.js';
 import { Sky } from './sky.js';
 import { langColor, cityTier } from './lore.js';
 import { catalogOf } from './systemView.js';
+import { shareHtml, wireShare, REPO } from './share.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
@@ -248,12 +249,15 @@ export class PlanetView {
       ${d.bio ? `<p class="bio">${d.bio}</p>` : ''}
       <h4>Cities <small>click to land</small></h4>
       <ul class="cities">${cities}</ul>
-      ${d.live ? '<p class="note">Live world: fetched from GitHub just now.</p>' : ''}
+      ${d.live ? `<div class="join"><b>This world isn't charted yet.</b> It was fetched live from GitHub just now. <a href="https://github.com/${REPO}" target="_blank" rel="noopener">⭐ Star the Commitverse</a> and it joins its galaxy at the next daily update.</div>` : ''}
+      <h4>Share this world</h4>
+      ${shareHtml(d)}
       <p><button id="leave-orbit" class="chip world">↥ Leave orbit: see this star system</button></p>`;
   }
 
   #wireCard() {
     this.ctx.ui.cardEl.querySelector('#leave-orbit').onclick = () => this.zoomOut();
+    wireShare(this.ctx.ui.cardEl, this.data, (html) => this.ctx.ui.toast(html));
     this.ctx.ui.cardEl.querySelectorAll('.cities li').forEach((li) => {
       const i = Number(li.dataset.i);
       li.onmouseenter = () => this.#hover(i);

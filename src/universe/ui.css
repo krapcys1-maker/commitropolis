@@ -78,6 +78,16 @@ input[type='search'] { width: 230px; }
 button { cursor: pointer; }
 button:hover, .hud-btn:hover { background: rgba(255, 255, 255, 0.1); }
 .hud-btn { text-decoration: none; white-space: nowrap; color: var(--gold); }
+#star-btn b { font: 600 12px var(--mono); color: var(--text); margin-left: 2px; }
+#star-btn b:empty { display: none; }
+
+/* sharing a world (share.js) */
+.share-card { display: block; width: 100%; border-radius: 10px; margin: 2px 0 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
+.share-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.share-row .chip { text-decoration: none; }
+.join { margin: 12px 0; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; color: #e6ecff; background: rgba(255, 207, 135, 0.08); border: 1px solid rgba(255, 207, 135, 0.35); }
+.join a { color: var(--gold); }
+.copy-fallback { max-height: 160px; overflow: auto; font: 11px var(--mono); white-space: pre-wrap; user-select: all; }
 
 #card {
   position: fixed;

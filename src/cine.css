@@ -16,7 +16,11 @@ body.director #loading,
 body.director #reader-close,
 body.director #reader-gh,
 body.director #scale,
-body.director #scale-push { display: none !important; }
+body.director #scale-push,
+body.director #film-btn,
+body.director .star-btn { display: none !important; }
+/* the record panel is the one control that stays in director mode */
+body.director #rec, body.director #rec * { transition: none !important; }
 body.director *,
 body.director *::before,
 body.director *::after { transition: none !important; animation: none !important; }

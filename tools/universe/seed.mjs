@@ -10,7 +10,7 @@
 // Output: public/universe/galaxy.json, public/universe/migrations.json, public/universe/planets/<login>.json
 import fs from 'node:fs';
 import path from 'node:path';
-import { galaxyOf } from '../../src/universe/cosmos.js';
+import { galaxyOf } from '../../src/universe/galaxies.js';
 import { logMoves } from './migrations.mjs';
 
 const OUT = 'public/universe';

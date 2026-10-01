@@ -11,7 +11,9 @@ const opt = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : fallback;
 };
-const film = JSON.parse(readFileSync(opt('cues', 'video/bigbang-silent.cues.json'), 'utf8'));
+const PART = opt('part', 'all');
+// --part city: the city part alone, for a film of any repository (src/cityDirector.js records it live)
+const film = PART === 'city' ? { duration: Number(opt('duration', 28.6)), segments: [{ name: 'city', start: 0 }], cues: [] } : JSON.parse(readFileSync(opt('cues', 'video/bigbang-silent.cues.json'), 'utf8'));
 const OUT = opt('out', 'video/score.wav');
 const SR = 48000;
 const DUR = film.duration;
@@ -259,62 +261,65 @@ const C = {
 };
 const PENTA = [62, 65, 67, 69, 72, 74, 77, 79, 81, 84, 86]; // D minor pentatonic, upper octaves
 
-// 0 - 6.6: the void before the first commit
-tone(0, 6.4, mtof(26), { amp: 0.06, attack: 3, release: 1.2, partials: [1, 0.6, 0.45, 0.25], send: 0.1 });
-tone(0.4, 6.0, mtof(33), { amp: 0.07, attack: 3.5, release: 1, send: 0.2 });
-pad(0.2, 6.2, [38, 45, 52, 53], { amp: 0.035, attack: 3.5, release: 1.0, cut0: 260, cut1: 700, send: 0.7 });
-tone(1.5, 4.8, mtof(86), { amp: 0.012, attack: 2, release: 1.5, tremolo: 0.6, pan: -0.4, send: 0.9 });
-tone(2.2, 4.4, mtof(93), { amp: 0.008, attack: 2, release: 1.5, tremolo: 0.6, pan: 0.5, send: 0.9 });
-noise(4.6, 2.0, { amp: 0.09, f0: 300, f1: 7000, q: 1.6, shape: (x) => x ** 3, pan0: -0.3, pan1: 0.3, send: 0.6 }); // reverse swell
+// the universe part plays only in the whole film (--part city renders the city alone, for films of any repo)
+if (PART === 'all') {
+  // 0 - 6.6: the void before the first commit
+  tone(0, 6.4, mtof(26), { amp: 0.06, attack: 3, release: 1.2, partials: [1, 0.6, 0.45, 0.25], send: 0.1 });
+  tone(0.4, 6.0, mtof(33), { amp: 0.07, attack: 3.5, release: 1, send: 0.2 });
+  pad(0.2, 6.2, [38, 45, 52, 53], { amp: 0.035, attack: 3.5, release: 1.0, cut0: 260, cut1: 700, send: 0.7 });
+  tone(1.5, 4.8, mtof(86), { amp: 0.012, attack: 2, release: 1.5, tremolo: 0.6, pan: -0.4, send: 0.9 });
+  tone(2.2, 4.4, mtof(93), { amp: 0.008, attack: 2, release: 1.5, tremolo: 0.6, pan: 0.5, send: 0.9 });
+  noise(4.6, 2.0, { amp: 0.09, f0: 300, f1: 7000, q: 1.6, shape: (x) => x ** 3, pan0: -0.3, pan1: 0.3, send: 0.6 }); // reverse swell
 
-// 6.6: the Big Bang
-boom(6.6, { amp: 0.5, f0: 110, f1: 30, len: 3.6, crack: 0.3 });
-noise(6.6, 3.5, { amp: 0.06, f0: 9000, f1: 2500, q: 0.6, mode: 'high', shape: (x) => Math.exp(-x * 4), send: 0.8 });
-// the galaxy forms
-const formation = [[6.6, 'Dm9'], [9.6, 'Bbmaj7'], [12.6, 'Fmaj7'], [15.6, 'Cadd9'], [18.6, 'Gm9']];
-formation.forEach(([t, name], k) => pad(t, 3.2, C[name], { amp: 0.055 + k * 0.006, attack: t === 6.6 ? 0.05 : 0.9, release: 1.6, cut0: 500 + k * 250, cut1: 1300 + k * 450, send: 0.6 }));
-tone(6.6, 14.4, mtof(26), { amp: 0.035, attack: 1, release: 1, partials: [1, 0.5, 0.3], send: 0.05 });
-// stars light up: bells, denser as the galaxy fills, a flurry when the AI Nebula ignites
-for (let t = 7.2; t < 21; ) {
-  const busy = 1.5 + 9 * span(t, 7, 15) + (t > 15.6 && t < 18 ? 6 : 0) + (t > 18.6 ? 4 : 0);
-  bell(t, PENTA[Math.floor(rand() * PENTA.length)] + (t > 15.6 && t < 18 ? 0 : 0), { amp: 0.018 + rand() * 0.014, decay: 1.4 + rand(), pan: rand() * 1.6 - 0.8, index: 2 + rand() * 2 });
-  t += (0.3 + rand() * 0.7) / busy * 2.5;
+  // 6.6: the Big Bang
+  boom(6.6, { amp: 0.5, f0: 110, f1: 30, len: 3.6, crack: 0.3 });
+  noise(6.6, 3.5, { amp: 0.06, f0: 9000, f1: 2500, q: 0.6, mode: 'high', shape: (x) => Math.exp(-x * 4), send: 0.8 });
+  // the galaxy forms
+  const formation = [[6.6, 'Dm9'], [9.6, 'Bbmaj7'], [12.6, 'Fmaj7'], [15.6, 'Cadd9'], [18.6, 'Gm9']];
+  formation.forEach(([t, name], k) => pad(t, 3.2, C[name], { amp: 0.055 + k * 0.006, attack: t === 6.6 ? 0.05 : 0.9, release: 1.6, cut0: 500 + k * 250, cut1: 1300 + k * 450, send: 0.6 }));
+  tone(6.6, 14.4, mtof(26), { amp: 0.035, attack: 1, release: 1, partials: [1, 0.5, 0.3], send: 0.05 });
+  // stars light up: bells, denser as the galaxy fills, a flurry when the AI Nebula ignites
+  for (let t = 7.2; t < 21; ) {
+    const busy = 1.5 + 9 * span(t, 7, 15) + (t > 15.6 && t < 18 ? 6 : 0) + (t > 18.6 ? 4 : 0);
+    bell(t, PENTA[Math.floor(rand() * PENTA.length)] + (t > 15.6 && t < 18 ? 0 : 0), { amp: 0.018 + rand() * 0.014, decay: 1.4 + rand(), pan: rand() * 1.6 - 0.8, index: 2 + rand() * 2 });
+    t += (0.3 + rand() * 0.7) / busy * 2.5;
+  }
+  // arpeggio pulse from 2015 on
+  for (let t = 12.6, k = 0; t < 21; t += 0.3125, k++) {
+    const chord = formation.filter(([s]) => s <= t).at(-1)[1];
+    const tones = C[chord].filter((m) => m >= 50);
+    pluck(t, tones[k % tones.length] + 12, { amp: 0.035 * span(t, 12.6, 15), bright: 0.35, pan: Math.sin(k * 0.9) * 0.5, decay: 0.994, send: 0.5, dur: 1.4 });
+  }
+
+  // 21 - 24.6: "3,959 worlds"
+  pad(21, 3.6, C.Dbig, { amp: 0.09, attack: 0.4, release: 1.6, cut0: 1600, cut1: 3200, send: 0.7 });
+  tone(21, 3.6, mtof(26), { amp: 0.06, attack: 0.3, release: 1.4, partials: [1, 0.5, 0.3], send: 0.05 });
+  [74, 77, 81, 86, 89].forEach((m, k) => bell(21.1 + k * 0.18, m, { amp: 0.03, decay: 2.6, pan: -0.6 + k * 0.3 }));
+
+  // 24.5 - 28.5: the dive into a star
+  pad(24.5, 3.9, C.Asus4, { amp: 0.06, attack: 2.5, release: 0.4, cut0: 600, cut1: 4000, send: 0.5 });
+  noise(24.5, 4.0, { amp: 0.16, f0: 200, f1: 9000, q: 1.8, shape: (x) => x ** 2.2, pan0: -0.5, pan1: 0.5, send: 0.4 });
+  tone(24.5, 4.0, mtof(57), { amp: 0.02, attack: 2, release: 0.1, glide: 24, partials: [1, 0.4], send: 0.6 });
+
+  // 28.5: a world
+  boom(28.5, { amp: 0.3, f0: 70, f1: 30, len: 2.5, crack: 0.12, send: 0.5 });
+  noise(28.5, 3, { amp: 0.05, f0: 8000, f1: 3000, q: 0.6, mode: 'high', shape: (x) => Math.exp(-x * 3), send: 0.9 });
+  const world = [[28.5, 'Bbmaj9'], [31.0, 'FC'], [33.5, 'Gm9lo'], [36.0, 'Dm9']];
+  world.forEach(([t, name]) => pad(t, 2.5, C[name], { amp: 0.06, attack: 0.8, release: 1.4, cut0: 900, cut1: 1600, send: 0.65 }));
+  for (let t = 29.1, k = 0; t < 38.6; t += 0.3125, k++) {
+    const chord = world.filter(([s]) => s <= t).at(-1)[1];
+    const tones = C[chord].filter((m) => m >= 45);
+    const order = [0, 2, 1, 3, 2, 4, 3, 5];
+    pluck(t, tones[order[k % 8] % tones.length] + 12, { amp: 0.04, bright: 0.25 + 0.2 * Math.sin(k * 0.3), pan: Math.sin(k * 1.3) * 0.55, decay: 0.995, send: 0.55, dur: 1.6 });
+  }
+
+  // 38.6 - 43.4: down through the atmosphere
+  pad(38.6, 2.4, C.Gm9lo, { amp: 0.055, attack: 0.6, release: 1.2, cut0: 1200, cut1: 900, send: 0.6 });
+  pad(41.0, 2.4, C.A7sus4, { amp: 0.06, attack: 0.6, release: 0.8, cut0: 900, cut1: 3500, send: 0.6 });
+  noise(38.6, 4.8, { amp: 0.15, f0: 300, f1: 1800, q: 0.7, mode: 'low', shape: (x) => x ** 1.6, send: 0.3 }); // wind
+  noise(40.6, 2.8, { amp: 0.13, f0: 2500, f1: 300, q: 1.4, shape: (x) => Math.sin(Math.PI * x) ** 2, pan0: 0.7, pan1: -0.7, send: 0.4 }); // whoosh down
+
 }
-// arpeggio pulse from 2015 on
-for (let t = 12.6, k = 0; t < 21; t += 0.3125, k++) {
-  const chord = formation.filter(([s]) => s <= t).at(-1)[1];
-  const tones = C[chord].filter((m) => m >= 50);
-  pluck(t, tones[k % tones.length] + 12, { amp: 0.035 * span(t, 12.6, 15), bright: 0.35, pan: Math.sin(k * 0.9) * 0.5, decay: 0.994, send: 0.5, dur: 1.4 });
-}
-
-// 21 - 24.6: "3,959 worlds"
-pad(21, 3.6, C.Dbig, { amp: 0.09, attack: 0.4, release: 1.6, cut0: 1600, cut1: 3200, send: 0.7 });
-tone(21, 3.6, mtof(26), { amp: 0.06, attack: 0.3, release: 1.4, partials: [1, 0.5, 0.3], send: 0.05 });
-[74, 77, 81, 86, 89].forEach((m, k) => bell(21.1 + k * 0.18, m, { amp: 0.03, decay: 2.6, pan: -0.6 + k * 0.3 }));
-
-// 24.5 - 28.5: the dive into a star
-pad(24.5, 3.9, C.Asus4, { amp: 0.06, attack: 2.5, release: 0.4, cut0: 600, cut1: 4000, send: 0.5 });
-noise(24.5, 4.0, { amp: 0.16, f0: 200, f1: 9000, q: 1.8, shape: (x) => x ** 2.2, pan0: -0.5, pan1: 0.5, send: 0.4 });
-tone(24.5, 4.0, mtof(57), { amp: 0.02, attack: 2, release: 0.1, glide: 24, partials: [1, 0.4], send: 0.6 });
-
-// 28.5: a world
-boom(28.5, { amp: 0.3, f0: 70, f1: 30, len: 2.5, crack: 0.12, send: 0.5 });
-noise(28.5, 3, { amp: 0.05, f0: 8000, f1: 3000, q: 0.6, mode: 'high', shape: (x) => Math.exp(-x * 3), send: 0.9 });
-const world = [[28.5, 'Bbmaj9'], [31.0, 'FC'], [33.5, 'Gm9lo'], [36.0, 'Dm9']];
-world.forEach(([t, name]) => pad(t, 2.5, C[name], { amp: 0.06, attack: 0.8, release: 1.4, cut0: 900, cut1: 1600, send: 0.65 }));
-for (let t = 29.1, k = 0; t < 38.6; t += 0.3125, k++) {
-  const chord = world.filter(([s]) => s <= t).at(-1)[1];
-  const tones = C[chord].filter((m) => m >= 45);
-  const order = [0, 2, 1, 3, 2, 4, 3, 5];
-  pluck(t, tones[order[k % 8] % tones.length] + 12, { amp: 0.04, bright: 0.25 + 0.2 * Math.sin(k * 0.3), pan: Math.sin(k * 1.3) * 0.55, decay: 0.995, send: 0.55, dur: 1.6 });
-}
-
-// 38.6 - 43.4: down through the atmosphere
-pad(38.6, 2.4, C.Gm9lo, { amp: 0.055, attack: 0.6, release: 1.2, cut0: 1200, cut1: 900, send: 0.6 });
-pad(41.0, 2.4, C.A7sus4, { amp: 0.06, attack: 0.6, release: 0.8, cut0: 900, cut1: 3500, send: 0.6 });
-noise(38.6, 4.8, { amp: 0.15, f0: 300, f1: 1800, q: 0.7, mode: 'low', shape: (x) => x ** 1.6, send: 0.3 }); // wind
-noise(40.6, 2.8, { amp: 0.13, f0: 2500, f1: 300, q: 1.4, shape: (x) => Math.sin(Math.PI * x) ** 2, pan0: 0.7, pan1: -0.7, send: 0.4 }); // whoosh down
-
 // ---------------------------------------------------------------- the city
 const c0 = city;
 noise(c0, 2.6, { amp: 0.11, f0: 1500, f1: 300, q: 0.6, mode: 'low', shape: (x) => (1 - x) ** 2, send: 0.3 }); // clouds clearing
@@ -403,7 +408,7 @@ const verb = freeverb(wet);
 const L = Math.floor(DUR * SR);
 const mix = [new Float32Array(L), new Float32Array(L)];
 // the arc of the film: a quiet void, a swell to "3,959 worlds", a breath at the planet, the city, the finale
-const arc = [[0, 0.5], [6.4, 0.6], [6.7, 0.85], [20, 0.9], [21.2, 1.0], [28.6, 1.0], [30, 0.8], [38.6, 0.85], [43.4, 0.9], [c0 + 1, 0.95], [c0 + 21.4, 0.95], [c0 + 22.3, 1.0]];
+const arc = PART === 'all' ? [[0, 0.5], [6.4, 0.6], [6.7, 0.85], [20, 0.9], [21.2, 1.0], [28.6, 1.0], [30, 0.8], [38.6, 0.85], [43.4, 0.9], [c0 + 1, 0.95], [c0 + 21.4, 0.95], [c0 + 22.3, 1.0]] : [[0, 0.95], [21.4, 0.95], [22.3, 1.0]];
 const arcAt = (t) => {
   let k = 1;
   while (k < arc.length - 1 && arc[k][0] < t) k++;

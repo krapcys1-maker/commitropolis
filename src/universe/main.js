@@ -346,6 +346,23 @@ function openCodex() {
 }
 $('codex-btn').onclick = openCodex;
 
+// The star button shows how many have joined (one API request per visit, cached for the session).
+(async () => {
+  const key = 'commitverse:stars';
+  let n = null;
+  try {
+    n = sessionStorage.getItem(key);
+  } catch {}
+  if (n === null) {
+    const res = await fetch('https://api.github.com/repos/krapcys1-maker/commitverse').catch(() => null);
+    if (res?.ok) n = String((await res.json()).stargazers_count);
+    try {
+      if (n !== null) sessionStorage.setItem(key, n);
+    } catch {}
+  }
+  if (n !== null) $('star-btn').querySelector('b').textContent = Number(n).toLocaleString('en-US');
+})();
+
 async function prologue() {
   // the prologue opens the universe; a link to a particular place goes straight there
   if (['planet', 'system', 'galaxy', 'sector', 'skip'].some((k) => params.has(k)) || sessionStorage.getItem('prologue')) return;
@@ -378,6 +395,7 @@ function stepFrame(dt) {
   current?.update(dt, time);
   if (leaving) updateLeaving(dt);
   else if (!current?.landing && !current?.flying && !current?.ascending) controls.update();
+  finish.uniforms.uWarp.value = warpNow();
   composer.render();
   labelRenderer.render(current?.scene ?? renderPass.scene, camera);
 }
@@ -386,6 +404,18 @@ function frame() {
   stepFrame(Math.min((now - last) / 1000, 0.1));
   last = now;
   requestAnimationFrame(frame);
+}
+
+// How hard space streaks past right now: leaving a scale, flying into something, arriving somewhere.
+function warpNow() {
+  const span = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+  let w = leaving ? span(leaving.t, 0, 0.4) : 0;
+  const f = current?.flying;
+  if (f?.fadeIn) w = Math.max(w, 1 - span(f.t * f.dur, 0, 0.8));
+  else if (f?.then) w = Math.max(w, span(f.t, 0.55, 1));
+  if (current?.landing) w = Math.max(w, span(current.landing.t, 3.2, 4.6) * 0.55);
+  if (current?.ascending) w = Math.max(w, (1 - span(current.ascending.t, 0, 1.6)) * 0.5);
+  return w * 0.9;
 }
 
 // Hooks for scripted capture and tests: step the world with a fixed dt, switch views directly.

@@ -139,6 +139,120 @@ export class Planet {
     this.#buildClouds();
     this.#buildAtmosphere();
     this.#buildCivilisation();
+    this.#buildAurora();
+    this.#buildFleet();
+  }
+
+  // Fleets of contributor ships (Level 5 and up, docs/LORE.md): engine lights on inclined orbits,
+  // each with a short trail. The orbits are computed in the vertex shader: one draw call for all.
+  #buildFleet() {
+    const lv = this.level.level;
+    if (lv < 5) return;
+    const ships = lv >= 7 ? 44 : lv >= 6 ? 28 : 16;
+    const TRAIL = 7;
+    const rand = rng(hashString(`${this.data.login}:fleet`));
+    const n = ships * TRAIL;
+    const orbit = new Float32Array(n * 4); // radius, eccentricity, phase, speed
+    const tilt = new Float32Array(n * 3); // euler x, y, z of the orbit plane
+    const trail = new Float32Array(n);
+    for (let i = 0; i < ships; i++) {
+      const o = [R * (1.25 + rand() * 1.3), rand() * 0.35, rand() * Math.PI * 2, (0.12 + rand() * 0.22) * (rand() < 0.5 ? 1 : -1)];
+      const t = [(rand() - 0.5) * 2.2, rand() * Math.PI * 2, (rand() - 0.5) * 0.8];
+      for (let k = 0; k < TRAIL; k++) {
+        orbit.set(o, (i * TRAIL + k) * 4);
+        tilt.set(t, (i * TRAIL + k) * 3);
+        trail[i * TRAIL + k] = k;
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    geo.setAttribute('aOrbit', new THREE.BufferAttribute(orbit, 4));
+    geo.setAttribute('aTilt', new THREE.BufferAttribute(tilt, 3));
+    geo.setAttribute('aTrail', new THREE.BufferAttribute(trail, 1));
+    const points = new THREE.Points(
+      geo,
+      new THREE.ShaderMaterial({
+        uniforms: { uTime: this.uniforms.uTime },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          attribute vec4 aOrbit;
+          attribute vec3 aTilt;
+          attribute float aTrail;
+          uniform float uTime;
+          varying float vFade;
+          mat3 rotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
+          mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+          mat3 rotZ(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+          void main() {
+            float th = aOrbit.z + aOrbit.w * uTime - sign(aOrbit.w) * aTrail * 0.018;
+            float r = aOrbit.x * (1.0 - aOrbit.y * cos(th));
+            vec3 p = rotY(aTilt.y) * rotX(aTilt.x) * rotZ(aTilt.z) * vec3(cos(th) * r, 0.0, sin(th) * r);
+            vec4 mv = modelViewMatrix * vec4(p, 1.0);
+            vFade = 1.0 - aTrail / ${TRAIL.toFixed(1)};
+            gl_PointSize = clamp((aTrail < 0.5 ? 2.6 : 1.6) * 260.0 / -mv.z, 1.0, 7.0);
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: /* glsl */ `
+          varying float vFade;
+          void main() {
+            vec2 q = gl_PointCoord * 2.0 - 1.0;
+            float d = dot(q, q);
+            if (d > 1.0) discard;
+            gl_FragColor = vec4(vec3(1.1, 1.6, 2.4) * vFade * vFade * exp(-d * 2.2), 1.0);
+          }`,
+      })
+    );
+    points.frustumCulled = false;
+    this.frame.add(points);
+  }
+
+  // Aurorae over both poles, on the night side. They burn brightest on a world that shipped this week
+  // and fade on one that has gone quiet: activity is the solar wind here.
+  #buildAurora() {
+    const lastPush = Math.max(0, ...this.data.repos.map((r) => r.p ?? 0));
+    const days = (Date.now() / 1000 - lastPush) / 86400;
+    const strength = days < 7 ? 1 : days < 30 ? 0.65 : days < 180 ? 0.3 : 0;
+    if (!strength) return;
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uTime: this.uniforms.uTime, uSunDir: this.uniforms.uSunDir, uStrength: { value: strength } },
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        varying vec3 vWorld;
+        void main() {
+          vUv = uv;
+          vec4 w = modelMatrix * vec4(position, 1.0);
+          vWorld = w.xyz;
+          gl_Position = projectionMatrix * viewMatrix * w;
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform float uStrength;
+        uniform vec3 uSunDir;
+        varying vec2 vUv;
+        varying vec3 vWorld;
+        void main() {
+          float a = vUv.x * 6.2831853;
+          float curtain = 0.5 + 0.5 * sin(a * 9.0 + uTime * 0.5 + 2.0 * sin(a * 3.0 - uTime * 0.31));
+          curtain *= 0.55 + 0.45 * sin(a * 27.0 - uTime * 1.1 + sin(a * 5.0) * 3.0);
+          float v = vUv.y;
+          float body = smoothstep(0.0, 0.12, v) * pow(clamp(1.0 - v, 0.0, 1.0), 1.6); // clamped: a NaN here blooms over the whole frame
+          vec3 col = mix(vec3(0.15, 1.7, 0.75), vec3(1.0, 0.3, 1.5), smoothstep(0.3, 1.0, v));
+          float night = smoothstep(0.2, -0.3, dot(normalize(vWorld), normalize(uSunDir)));
+          gl_FragColor = vec4(col * curtain * body * night * uStrength * 1.35, 1.0);
+        }`,
+    });
+    for (const pole of [1, -1]) {
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.31, R * 0.37, R * 0.17, 160, 1, true), material);
+      ring.position.y = pole * R * 1.02;
+      if (pole < 0) ring.rotation.x = Math.PI;
+      this.group.add(ring);
+    }
   }
 
   #palette() {
