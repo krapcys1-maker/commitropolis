@@ -75,7 +75,7 @@ export const PROLOGUE = [
   'It was called git, and everything since has orbited it.',
   'In 2008 the universe began to expand.',
   'Worlds formed around people. Cities grew around their ideas.',
-  'And every time someone left a star, a new light appeared in that world’s sky.',
+  'They gathered into galaxies by the code they write, and every star they were given made them brighter.',
   'You are a cartographer of the Commitverse.',
 ];
 
