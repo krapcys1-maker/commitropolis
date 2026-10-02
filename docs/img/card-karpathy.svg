@@ -58,8 +58,8 @@
 <text x="292" y="84" class="name">Andrej</text>
 <text x="292" y="104" class="small">@karpathy</text>
 <text x="292" y="130" class="level">Level 6 · Ecumenopolis</text>
-<rect x="292" y="139" width="390" height="5" rx="2.5" fill="#ffffff" fill-opacity=".1"/><rect x="292" y="139" width="387.3" height="5" rx="2.5" fill="url(#bar)"/>
-<text x="292" y="163" class="stat">494,446 ★  ·  54 cities  ·  223,890 followers</text>
+<rect x="292" y="139" width="390" height="5" rx="2.5" fill="#ffffff" fill-opacity=".1"/><rect x="292" y="139" width="387.4" height="5" rx="2.5" fill="url(#bar)"/>
+<text x="292" y="163" class="stat">494,571 ★  ·  54 cities  ·  223,994 followers</text>
 <circle cx="296" cy="181" r="4" fill="#3572A5"/><text x="305" y="185" class="small">Python</text><circle cx="408" cy="181" r="4" fill="#DA5B0B"/><text x="417" y="185" class="small">Jupyter Note…</text><circle cx="520" cy="181" r="4" fill="#3A9E4A"/><text x="529" y="185" class="small">Cuda</text>
 <text x="292" y="207" class="small">autoresearch · nanoGPT · nanochat</text>
 <text x="292" y="228" class="link">Explore this world in the Commitverse  →</text>
